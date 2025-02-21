@@ -5,6 +5,10 @@ echo "# Preparation script ..."
 # link '/bin/sh' to bash instead of dash
 ln -sf bash /bin/sh
 
+#cleanup
+rm -f /etc/config/*
+rm -rf /tmp/bbfdm/.bbfdm/* /tmp/bbfdm/.cwmp/* /tmp/bbfdm/.usp/*
+
 echo "Installing bbfdm rpcd utilities"
 cp -r ./test/files/etc/* /etc/
 cp -r ./test/files/usr/* /usr/

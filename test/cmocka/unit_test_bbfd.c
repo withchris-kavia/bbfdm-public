@@ -54,7 +54,7 @@ static int teardown_revert(void **state)
 
 static int group_init(void **state)
 {
-	bbf_global_init(TR181_ROOT_TREE, "/usr/share/bbfdm/plugins");
+	bbf_global_init(TR181_ROOT_TREE, "/usr/share/bbfdm/micro_services/core");
 	return 0;
 }
 

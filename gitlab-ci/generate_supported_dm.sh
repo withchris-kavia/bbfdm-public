@@ -19,12 +19,10 @@ install_cmph
 install_libeasy
 install_libethernet
 
-# Make sure that all plugins are removed
-[ ! -d "${BBFDM_PLUGIN_DIR}" ] && mkdir -p "${BBFDM_PLUGIN_DIR}"
-rm -f ${BBFDM_PLUGIN_DIR}/*
-
 [ ! -d "${BBFDM_MS_DIR}" ] && mkdir -p "${BBFDM_MS_DIR}"
-rm -f ${BBFDM_MS_DIR}/*
+rm -rf ${BBFDM_MS_DIR}/*
+
+mkdir -p ${BBFDM_MS_DIR}/core
 
 if [ -z "${1}" ]; then
 	./tools/generate_dm.py tools/tools_input.json

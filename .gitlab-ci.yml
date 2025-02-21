@@ -15,8 +15,8 @@ include:
        - if: $CI_COMMIT_BRANCH == "devel"
 
 stages:
-    - unit_test
     - static_code_analysis
+    - unit_test
     - functional_test
     - deploy
 
@@ -29,6 +29,7 @@ run_unit_test:
   - "./gitlab-ci/install-dependencies.sh ms"
   - "./gitlab-ci/setup.sh ms"
   - "./gitlab-ci/unit-test.sh"
+
   artifacts:
     when: always
     paths:

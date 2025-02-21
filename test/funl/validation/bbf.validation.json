@@ -5,7 +5,7 @@
             "method": "get",
             "args": {
                 "path": "Device.DeviceInfo.Manufacturer",
-                "optional": {"format":"raw", "proto":"usp"}
+                "optional": {"proto":"usp"}
             },
             "rc": 0
         },
@@ -13,7 +13,7 @@
             "method": "get",
             "args": {
                 "path": "Device.DeviceInfo.Manufacturer",
-                "optional": {"format":"raw", "proto":"cwmp"}
+                "optional": {"proto":"cwmp"}
             },
             "rc": 0
         },
@@ -21,7 +21,7 @@
             "method": "get",
             "args": {
                 "path":"Device.WiFi.SSID.*.Alias",
-                "optional": {"format":"raw", "proto":"cwmp"}
+                "optional": {"proto":"cwmp"}
             },
             "rc": 0
         },
@@ -29,7 +29,7 @@
             "method": "get",
             "args": {
                 "path": "Device.DeviceInfo.Manufacturer",
-                "optional": {"format":"raw", "proto":"both"}
+                "optional": {"proto":"both"}
             },
             "rc": 0
         },
@@ -37,15 +37,6 @@
             "method": "get",
             "args": {
                 "path": "Device.DeviceInfo.Manufacturer"
-            },
-            "rc": 0
-        },
-        {
-            "method": "get",
-            "args": {
-                "path": "Device.DeviceInfo.Manufacturer",
-                "optional": {"format":"raw", "proto":"usp"},
-                "maxdepth": "1"
             },
             "rc": 0
         },
@@ -78,7 +69,7 @@
             "method": "instances",
             "args": {
                 "path": "Device.WiFi.SSID.",
-                "optional": {"format":"raw", "proto":"usp"}
+                "optional": {"proto":"usp"}
             },
             "rc": 0
         },
@@ -101,14 +92,6 @@
             "method": "schema",
             "args": {
                 "path": "Device.DeviceInfo."
-            },
-            "rc": 0
-        },
-        {
-            "method": "get",
-            "args": {
-                "paths": ["Device.WiFi.SSID.1.SSID","Device.WiFi.SSID.2.SSID"],
-                "proto": "usp"
             },
             "rc": 0
         },

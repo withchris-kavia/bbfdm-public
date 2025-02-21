@@ -12,7 +12,7 @@ import glob
 # Constants
 BBF_ERROR_CODE = 0
 CURRENT_PATH = os.getcwd()
-BBF_PLUGIN_DIR = "/usr/share/bbfdm/plugins/"
+BBF_MS_CORE_DIR = "/usr/share/bbfdm/micro_services/core/"
 BBF_MS_DIR = "/usr/share/bbfdm/micro_services/"
 
 DM_JSON_FILE = os.path.join(CURRENT_PATH, "tools", "datamodel.json")
@@ -151,7 +151,7 @@ def generate_shared_library(dm_name, source_files, vendor_prefix,
     if is_microservice:
         outdir = BBF_MS_DIR
     else:
-        outdir = BBF_PLUGIN_DIR
+        outdir = BBF_MS_CORE_DIR
 
     output_library = outdir + dm_name
 
@@ -233,7 +233,7 @@ def build_and_install_dmcli():
         "-lbbfdm-ubus",
         "-lubox",
         "-lblobmsg_json",
-        "-lbbfdm",
+        "-lcore",
         "-ljson-c",
         "-lssl",
         "-lcrypto",
@@ -257,7 +257,7 @@ def fill_list_dm(proto, dm_list, dm_name=None):
     if dm_name:
         command = f"dm-cli -l {dm_name}"
     else:
-        command = "dm-cli -p /usr/share/bbfdm/plugins"
+        command = "dm-cli -p /usr/share/bbfdm/micro_services/core"
 
     # Add the appropriate flag (-c or -u) based on the proto value
     if proto == "cwmp":
@@ -411,7 +411,7 @@ def download_and_build_plugins(plugins, vendor_prefix):
                     if filename.endswith('.c'):
                         LIST_FILES.append(filename)
                     elif filename.endswith('.json'):
-                        install_json_plugin(filename, "/usr/share/bbfdm/plugins/"+f"{plugin_index}_{name}.json", prefix)
+                        install_json_plugin(filename, "/usr/share/bbfdm/micro_services/core/"+f"{plugin_index}_{name}.json", prefix)
                     else:
                         BBF_ERROR_CODE += 1
                         print(f"# Unknown file format {filename} {BBF_ERROR_CODE}")

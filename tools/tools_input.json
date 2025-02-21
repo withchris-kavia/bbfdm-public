@@ -358,18 +358,11 @@
       "proto": "git",
       "version": "devel",
       "dm_files": [
-        "src/wifi.c"
+        "src/wifi.c",
+        "src/dataelements.c"
       ],
       "extra_dependencies": [
         "-lm"
-      ]
-    },
-    {
-      "repo": "https://dev.iopsys.eu/bbf/wifidmd.git",
-      "proto": "git",
-      "version": "devel",
-      "dm_files": [
-        "src/dataelements.c"
       ]
     },
     {
@@ -414,14 +407,6 @@
       "repo": "https://dev.iopsys.eu/network/netmngr.git",
       "proto": "git",
       "version": "devel",
-      "dm_files": [
-        "src/interfacestack.c"
-      ]
-    },
-    {
-      "repo": "https://dev.iopsys.eu/network/netmngr.git",
-      "proto": "git",
-      "version": "devel",
       "extra_dependencies": [
         "-DNETMNGR_GRE_OBJ",
         "-DNETMNGR_IP_OBJ",
@@ -438,7 +423,8 @@
         "src/routeradvertisement.c",
         "src/routing.c",
         "src/ipv6rd.c",
-        "src/common.c"
+        "src/common.c",
+        "src/interfacestack.c"
       ]
     },
     {

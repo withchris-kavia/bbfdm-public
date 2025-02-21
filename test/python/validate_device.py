@@ -15,12 +15,11 @@ if sock.exists():
 else:
     assert ubus.connect()
 
-out = ubus.call('bbfdm', 'get', {"path":"Device.", "optional":{"format":"raw"}})
-assert isinstance(out[0]["results"][0], dict), "FAIL: get Device. on bbf with raw format"
-
-# Check get operation for Device. path succeed
 out = ubus.call('bbfdm', 'get', {"path":"Device."})
-assert isinstance(out[0]['Device'], dict), "FAIL: get Device. on bbf with pretty format"
+assert isinstance(out[0]["results"][0], dict), "FAIL: get Device."
+
+out = ubus.call('bbfdm', 'get', {"path":"Device"})
+assert out[0]["results"][0]["fault"] == 9005, "FAIL: get Device"
 
 ubus.disconnect()
 print("PASS: " + TEST_NAME)

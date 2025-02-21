@@ -19,7 +19,7 @@ echo "Validate BBF Data Model JSON Plugin"
 check_ret $?
 
 echo "Validating plugins"
-for plugin in $(ls -1 test/files/usr/share/bbfdm/plugins/*); do
+for plugin in $(ls -1 test/files/usr/share/bbfdm/micro_services/core/*); do
 	echo "Validating ${plugin} JSON Plugin"
 	./tools/validate_json_plugin.py ${plugin}
 	check_ret $?
