@@ -16,11 +16,9 @@
 
 #define BBFDM_ROOT_OBJECT "Device."
 #define BBFDM_UBUS_OBJECT "bbfdm"
-#define BBFDM_ADD_EVENT "AddObj"
-#define BBFDM_DEL_EVENT "DelObj"
-#define BBFDM_EVENT_NAME "event"
 #define BBFDM_MICROSERVICE_INPUT_PATH "/etc/bbfdm/services"
 #define MAX_PATH_LENGTH 1024
+#define MAX_VALUE_LENGTH 1024 * 4
 #define SERVICE_CALL_TIMEOUT 5000 // 5 secs
 #define SERVICE_CALL_OPERATE_TIMEOUT 1800000 // 30 mins
 

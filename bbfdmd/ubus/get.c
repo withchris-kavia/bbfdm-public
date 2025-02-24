@@ -81,43 +81,60 @@ static void fill_blob_param(struct blob_buf *bb, struct blob_attr *path, const c
 	blobmsg_close_table(bb, table);
 }
 
-static void resolve_reference_path(struct async_request_context *ctx, char *ref_path, char *output, size_t output_len)
+static void resolve_reference_path(struct async_request_context *ctx, struct blob_attr *data, char *output, size_t output_len)
 {
-	char *token = NULL, *saveptr = NULL;
-	char buffer[MAX_PATH_LENGTH] = {0};
-
-	if (!ref_path || !output || !output_len) {
+	if (!ctx || !output || output_len == 0) {
 		BBFDM_ERR("Invalid arguments");
 		return;
 	}
 
-	// Initialize output buffer
-	output[0] = 0;
+	output[0] = 0; // Ensure output buffer is initialized
 
-	// Return if reference path is empty
-	if (strlen(ref_path) == 0)
+	if (!data) {
+		BBFDM_ERR("Invalid data value");
+		return;
+	}
+
+	char *ref_path = blobmsg_get_string(data);
+	if (!ref_path || ref_path[0] == '\0') // Empty reference path, nothing to resolve
 		return;
 
+	char buffer[MAX_VALUE_LENGTH] = {0};
 	snprintf(buffer, sizeof(buffer), "%s", ref_path);
 
-	for (token = strtok_r(buffer, ",", &saveptr); token; token = strtok_r(NULL, ",", &saveptr)) {
+	// Check if it is a reference path (separator ',') or list paths (separator ';')
+	bool is_ref_list = strchr(ref_path, ';') != NULL;
+	char *token = NULL, *saveptr = NULL;
+	unsigned pos = 0;
 
-		// Reference is found, don't need to parse the list
+	for (token = strtok_r(buffer, is_ref_list ? ";" : ",", &saveptr);
+		token;
+		token = strtok_r(NULL, is_ref_list ? ";" : ",", &saveptr)) {
+
+		// If token does not contain '[', it’s a direct reference
 		if (!strchr(token, '[')) {
-			snprintf(output, output_len, "%s", token);
-			return;
+			pos += snprintf(&output[pos], output_len - pos, "%s,", token);
+			if (!is_ref_list) break;
+			continue;
 		}
 
+		// Search for token in the linker list
 		struct linker_args *linker = NULL;
+		bool linker_found = false;
 		list_for_each_entry(linker, &ctx->linker_list, list) {
-			// Reference is found in the resolved list
-			if (strcmp(linker->path, token) == 0 && strlen(linker->value) != 0) {
-				snprintf(output, output_len, "%s", linker->value);
-				return;
+			if (strcmp(linker->path, token) == 0 && linker->value[0] != '\0') {
+				pos += snprintf(&output[pos], output_len - pos, "%s,", linker->value);
+				linker_found = true;
+				break;
 			}
 		}
 
-		// Reference is not found in the resolved list
+		if (linker_found) {
+			if (!is_ref_list) break;
+			continue;
+		}
+
+		// If not found, attempt to resolve via micro-services
 		{
 			// Try to get reference value from micro-services directly
 			char *reference_path = get_reference_data(token, "reference_path");
@@ -127,14 +144,18 @@ static void resolve_reference_path(struct async_request_context *ctx, char *ref_
 
 			// Reference value is found
 			if (reference_path != NULL) {
-				snprintf(output, output_len, "%s", reference_path);
+				pos += snprintf(&output[pos], output_len - pos, "%s,", reference_path);
 				BBFDM_FREE(reference_path);
-				return;
+				if (!is_ref_list) break;
 			}
 		}
 	}
 
-	BBFDM_ERR("Can't resolve reference path '%s' -> Set its value to empty", ref_path);
+	if (pos > 0) {
+		output[pos - 1] = 0; // Remove trailing comma
+	} else {
+		BBFDM_INFO("Can't resolve reference path '%s' -> Set its value to empty", ref_path);
+	}
 }
 
 static void prepare_and_send_response(struct async_request_context *ctx)
@@ -172,12 +193,9 @@ static void prepare_and_send_response(struct async_request_context *ctx)
 				blobmsg_parse(policy, 4, fields, blobmsg_data(attr), blobmsg_len(attr));
 
 				if (is_reference_value(fields[3])) {
-					char buffer[1024] = {0};
-
-					char *data = fields[1] ? blobmsg_get_string(fields[1]) : "";
-
-					resolve_reference_path(ctx, data, buffer, sizeof(buffer));
-					fill_blob_param(&bb, fields[0], buffer, fields[2], fields[3]);
+					char data[MAX_VALUE_LENGTH] = {0};
+					resolve_reference_path(ctx, fields[1], data, sizeof(data));
+					fill_blob_param(&bb, fields[0], data, fields[2], fields[3]);
 				} else {
 					blobmsg_add_blob(&bb, attr);
 				}
