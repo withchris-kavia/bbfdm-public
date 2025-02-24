@@ -13,7 +13,6 @@
 #include "device.h"
 #include "lanconfigsecurity.h"
 #include "security.h"
-#include "gatewayinfo.h"
 #include "schedules.h"
 
 /*************************************************************
@@ -95,7 +94,6 @@ DMOBJ tDMRootObj[] = {
 {"LANConfigSecurity", &DMREAD, NULL, NULL, "file:/etc/config/users", NULL, NULL, NULL, NULL, tLANConfigSecurityParams, NULL, BBFDM_BOTH},
 {"Schedules", &DMREAD, NULL, NULL, NULL, NULL, NULL, NULL, tSchedulesObj, tSchedulesParams, NULL, BBFDM_BOTH},
 {"Security", &DMREAD, NULL, NULL, NULL, NULL, NULL, NULL, tSecurityObj, tSecurityParams, NULL, BBFDM_CWMP},
-{"GatewayInfo", &DMREAD, NULL, NULL, NULL, NULL, NULL, NULL, NULL, tGatewayInfoParams, NULL, BBFDM_CWMP},
 {0}
 };
 
