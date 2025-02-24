@@ -1647,8 +1647,8 @@ static int mparam_set_value(DMPARAM_ARGS)
 			if (p) *p = 0;
 		}
 
-		if (DM_STRCMP(value, dmctx->in_value) == 0) {
-			BBF_DEBUG("Requested value (%s) is same as current value (%s)...", dmctx->in_value, value);
+		if (DM_STRCMP(value, param_value) == 0) {
+			BBF_DEBUG("Requested value (%s) is same as current value (%s)...", param_value, value);
 			return 0;
 		}
 	}
