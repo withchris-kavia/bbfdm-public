@@ -662,18 +662,18 @@ static void bb_add_flags_arr(struct blob_buf *bb, uint32_t dm_flags)
 	if (!bb || !dm_flags)
 		return;
 
-	//void *flags_arr = blobmsg_open_array(bb, "flags");
+	void *flags_arr = blobmsg_open_array(bb, "flags");
 
 	if (dm_flags & DM_FLAG_REFERENCE)
-		blobmsg_add_u8(bb, "reference", true);
-	/*if (dm_flags & DM_FLAG_UNIQUE)
+		blobmsg_add_string(bb, NULL, "Reference");
+	if (dm_flags & DM_FLAG_UNIQUE)
 		blobmsg_add_string(bb, NULL, "Unique");
 	if (dm_flags & DM_FLAG_LINKER)
 		blobmsg_add_string(bb, NULL, "Linker");
 	if (dm_flags & DM_FLAG_SECURE)
-		blobmsg_add_string(bb, NULL, "Secure");*/
+		blobmsg_add_string(bb, NULL, "Secure");
 
-	//blobmsg_close_array(bb, flags_arr);
+	blobmsg_close_array(bb, flags_arr);
 }
 
 void fill_blob_param(struct blob_buf *bb, const char *path, const char *data, const char *type, uint32_t dm_flags)

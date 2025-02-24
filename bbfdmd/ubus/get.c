@@ -41,16 +41,42 @@ static void free_linker_entries(struct async_request_context *ctx)
 	}
 }
 
-static void fill_blob_param(struct blob_buf *bb, const char *path, const char *data, const char *type)
+static bool is_reference_value(struct blob_attr *flags)
+{
+	struct blob_attr *flag = NULL;
+	int rem = 0;
+
+	if (!flags || blobmsg_type(flags) != BLOBMSG_TYPE_ARRAY)
+		return false;
+
+	blobmsg_for_each_attr(flag, flags, rem) {
+		if (strcmp(blobmsg_get_string(flag), "Reference") == 0)
+			return true;
+	}
+
+	return false;
+}
+
+static void fill_blob_param(struct blob_buf *bb, struct blob_attr *path, const char *data, struct blob_attr *type, struct blob_attr *flags)
 {
 	if (!bb || !path || !data || !type)
 		return;
 
 	void *table = blobmsg_open_table(bb, NULL);
 
-	blobmsg_add_string(bb, "path", path);
+	if (path) {
+		blobmsg_add_field(bb, blobmsg_type(path), blobmsg_name(path), blobmsg_data(path), blobmsg_len(path));
+	}
+
 	blobmsg_add_string(bb, "data", data);
-	blobmsg_add_string(bb, "type", type);
+
+	if (type) {
+		blobmsg_add_field(bb, blobmsg_type(type), blobmsg_name(type), blobmsg_data(type), blobmsg_len(type));
+	}
+
+	if (flags) {
+		blobmsg_add_field(bb, blobmsg_type(flags), blobmsg_name(flags), blobmsg_data(flags), blobmsg_len(flags));
+	}
 
 	blobmsg_close_table(bb, table);
 }
@@ -140,22 +166,18 @@ static void prepare_and_send_response(struct async_request_context *ctx)
 					{ "path", BLOBMSG_TYPE_STRING },
 					{ "data", BLOBMSG_TYPE_STRING },
 					{ "type", BLOBMSG_TYPE_STRING },
-					{ "reference", BLOBMSG_TYPE_BOOL },
+					{ "flags", BLOBMSG_TYPE_ARRAY },
 				};
 
 				blobmsg_parse(policy, 4, fields, blobmsg_data(attr), blobmsg_len(attr));
 
-				bool is_reference = fields[3] ? blobmsg_get_u8(fields[3]) : false;
-
-				if (is_reference) {
+				if (is_reference_value(fields[3])) {
 					char buffer[1024] = {0};
 
-					char *path = fields[0] ? blobmsg_get_string(fields[0]) : "";
 					char *data = fields[1] ? blobmsg_get_string(fields[1]) : "";
-					char *type = fields[2] ? blobmsg_get_string(fields[2]) : "";
 
 					resolve_reference_path(ctx, data, buffer, sizeof(buffer));
-					fill_blob_param(&bb, path, buffer, type);
+					fill_blob_param(&bb, fields[0], buffer, fields[2], fields[3]);
 				} else {
 					blobmsg_add_blob(&bb, attr);
 				}
