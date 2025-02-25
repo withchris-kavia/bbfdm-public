@@ -159,7 +159,7 @@ def generate_shared_library(dm_name, source_files, vendor_prefix,
     if vendor_prefix is not None:
         VENDOR_PREFIX = vendor_prefix
     else:
-        VENDOR_PREFIX = "X_IOPSYS_EU_"
+        VENDOR_PREFIX = "X_IOWRT_EU_"
 
     # Ensure that the source files exist
     for source_file in source_files:
@@ -191,7 +191,7 @@ def build_and_install_bbfdm(vendor_prefix):
     if vendor_prefix is not None:
         VENDOR_PREFIX = vendor_prefix
     else:
-        VENDOR_PREFIX = "X_IOPSYS_EU_"
+        VENDOR_PREFIX = "X_IOWRT_EU_"
 
     # Build and install bbfdm
     cmake_command = [

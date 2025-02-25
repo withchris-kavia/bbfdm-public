@@ -198,8 +198,8 @@ if __name__ == '__main__':
 
     parser.add_argument(
         '-p', '--vendor-prefix',
-		default = 'X_IOPSYS_EU_',
-		metavar = 'X_IOPSYS_EU_',
+		default = 'X_IOWRT_EU_',
+		metavar = 'X_IOWRT_EU_',
 		help = 'Generate data model tree using provided vendor prefix for vendor defined objects'
     )
 

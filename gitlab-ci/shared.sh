@@ -63,7 +63,7 @@ function install_libbbf()
 		COV_LDFLAGS='--coverage'
 	fi
 
-	VENDOR_PREFIX='X_IOPSYS_EU_'
+	VENDOR_PREFIX='X_IOWRT_EU_'
 
 	echo "Compiling libbbf"
 	if [ -d build ]; then
@@ -100,7 +100,7 @@ function install_wifidmd_as_micro_service()
 
 	exec_cmd git clone -b devel https://dev.iopsys.eu/bbf/wifidmd.git /opt/dev/wifidmd
 
-	exec_cmd make -C /opt/dev/wifidmd/src/ clean && make -C /opt/dev/wifidmd/src/ CFLAGS="-D'BBF_VENDOR_PREFIX=\"X_IOPSYS_EU_\"'" WIFIDMD_WIFI_DATAELEMENTS='y'
+	exec_cmd make -C /opt/dev/wifidmd/src/ clean && make -C /opt/dev/wifidmd/src/ CFLAGS="-D'BBF_VENDOR_PREFIX=\"X_IOWRT_EU_\"'" WIFIDMD_WIFI_DATAELEMENTS='y'
 	install_ms /opt/dev/wifidmd/src/libwifi.so wifidmd
 }
 
@@ -184,7 +184,7 @@ function install_sysmngr_as_micro_service()
 
 	exec_cmd make -C /opt/dev/sysmngr/src/ clean && \
 	exec_cmd make -C /opt/dev/sysmngr/src/ \
-		CFLAGS+="-DBBF_VENDOR_PREFIX=\\\"X_IOPSYS_EU_\\\"" \
+		CFLAGS+="-DBBF_VENDOR_PREFIX=\\\"X_IOWRT_EU_\\\"" \
 		SYSMNGR_VENDOR_CONFIG_FILE='y' \
 		SYSMNGR_MEMORY_STATUS='y' \
 		SYSMNGR_PROCESS_STATUS='y' \

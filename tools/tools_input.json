@@ -25,7 +25,7 @@
           "-DSYSMNGR_NETWORK_PROPERTIES",
           "-DSYSMNGR_VENDOR_EXTENSIONS",
           "-DSYSMNGR_TEMPERATURE_STATUS",
-          "-DCUSTOM_PREFIX=\\\"X_IOPSYS_EU_\\\""
+          "-DCUSTOM_PREFIX=\\\"X_IOWRT_EU_\\\""
         ],
         "dm_files": [
             "src/deviceinfo.c",
@@ -170,7 +170,7 @@
       "version": "devel",
       "extra_dependencies": [
         "-DHAS_VENDOR_EXT",
-        "-DCUSTOM_PREFIX=\\\"X_IOPSYS_EU_\\\""
+        "-DCUSTOM_PREFIX=\\\"X_IOWRT_EU_\\\""
       ],
       "dm_files": [
         "src/bbf_plugin/hosts_ext.c"

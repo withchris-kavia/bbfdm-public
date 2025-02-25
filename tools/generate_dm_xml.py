@@ -114,8 +114,8 @@ def get_info_from_json(data, dm_json_files=None):
                     if i != (len(list_data) - 1) and list_data[i + 1] == list_data[i] + "{i}.":
                         continue
                     try:
-                        if str(list_data[i]).find("X_IOPSYS_EU_") != -1:
-                            param = str(list_data[i]).replace("X_IOPSYS_EU_", "{BBF_VENDOR_PREFIX}")
+                        if str(list_data[i]).find("X_IOWRT_EU_") != -1:
+                            param = str(list_data[i]).replace("X_IOWRT_EU_", "{BBF_VENDOR_PREFIX}")
                         else:
                             param = str(list_data[i])
 
@@ -392,8 +392,8 @@ if __name__ == '__main__':
 
     parser.add_argument(
         '-p', '--vendor-prefix',
-		default = 'X_IOPSYS_EU_',
-		metavar = 'X_IOPSYS_EU_',
+		default = 'X_IOWRT_EU_',
+		metavar = 'X_IOWRT_EU_',
 		help = 'Generate data model tree using provided vendor prefix for vendor defined objects.'
     )
 
