@@ -33,6 +33,7 @@ struct async_request_context {
 	struct blob_buf tmp_bb;
 	bool service_list_processed;
 	bool path_matched;
+	bool raw_format;
 	int pending_requests;
 	char requested_path[MAX_PATH_LENGTH];
 	char ubus_method[32];

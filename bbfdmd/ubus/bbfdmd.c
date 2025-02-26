@@ -38,6 +38,7 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 {
 	struct blob_attr *tb[__BBFDM_MAX];
 	service_entry_t *service = NULL;
+	unsigned int requested_proto = BBFDMD_BOTH;
 
 	if (blobmsg_parse(bbfdm_policy, __BBFDM_MAX, tb, blob_data(msg), blob_len(msg))) {
 		BBFDM_ERR("Failed to parse input message");
@@ -76,7 +77,7 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 		ubus_register_event_handler(ctx, &context->linker_handler, "bbfdm.linker.response");
 	}
 
-	unsigned int requested_proto = get_proto_type_option_value(tb[BBFDM_INPUT]);
+	fill_optional_input(tb[BBFDM_INPUT], &requested_proto, &context->raw_format);
 
 	ubus_defer_request(ctx, req, &context->request_data);
 
@@ -102,6 +103,8 @@ static int bbfdm_handler_sync(struct ubus_context *ctx, struct ubus_object *obj,
 	struct blob_attr *tb[__BBFDM_MAX];
 	service_entry_t *service = NULL;
 	char requested_path[MAX_PATH_LENGTH];
+	unsigned int requested_proto = BBFDMD_BOTH;
+	bool raw_format = false;
 	struct blob_buf bb = {0};
 
 	if (blobmsg_parse(bbfdm_policy, __BBFDM_MAX, tb, blob_data(msg), blob_len(msg))) {
@@ -121,7 +124,7 @@ static int bbfdm_handler_sync(struct ubus_context *ctx, struct ubus_object *obj,
 	memset(&bb, 0, sizeof(struct blob_buf));
 	blob_buf_init(&bb, 0);
 
-	unsigned int requested_proto = get_proto_type_option_value(tb[BBFDM_INPUT]);
+	fill_optional_input(tb[BBFDM_INPUT], &requested_proto, &raw_format);
 
 	list_for_each_entry(service, &registered_services, list) {
 

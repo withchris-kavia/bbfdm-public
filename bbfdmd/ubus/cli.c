@@ -70,21 +70,6 @@ static int bbfdm_ubus_invoke(const char *obj, const char *method, struct blob_at
 	return rc;
 }
 
-static struct blob_attr *get_results_array(struct blob_attr *msg)
-{
-	struct blob_attr *tb[1] = {0};
-	const struct blobmsg_policy p[1] = {
-			{ "results", BLOBMSG_TYPE_ARRAY }
-	};
-
-	if (msg == NULL)
-		return NULL;
-
-	blobmsg_parse(p, 1, tb, blobmsg_data(msg), blobmsg_len(msg));
-
-	return tb[0];
-}
-
 static void __ubus_callback(struct ubus_request *req, int msgtype __attribute__((unused)), struct blob_attr *msg)
 {
 	struct blob_attr *cur = NULL;
@@ -159,6 +144,10 @@ static int cli_exec_cmd(cli_data_t *cli_data, const char *path, const char *valu
 
 	blobmsg_add_string(&b, "path", path);
 	blobmsg_add_string(&b, "value", value ? value : "");
+
+	void *table = blobmsg_open_table(&b, "optional");
+	blobmsg_add_string(&b, "format", "raw");
+	blobmsg_close_table(&b, table);
 
 	int e = bbfdm_ubus_invoke(BBFDM_UBUS_OBJECT, cli_data->cmd, b.head, __ubus_callback, cli_data);
 

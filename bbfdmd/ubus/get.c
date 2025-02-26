@@ -15,6 +15,7 @@
 #include "common.h"
 #include "service.h"
 #include "get.h"
+#include "pretty_print.h"
 
 extern int g_log_level;
 
@@ -161,23 +162,23 @@ static void resolve_reference_path(struct async_request_context *ctx, struct blo
 static void prepare_and_send_response(struct async_request_context *ctx)
 {
 	struct blob_attr *attr = NULL;
-	struct blob_buf bb = {0};
-	int remaining = 0;
+	struct blob_buf bb_raw = {0};
+	size_t remaining = 0;
 
 	if (!ctx)
 		return;
 
-	memset(&bb, 0, sizeof(struct blob_buf));
-	blob_buf_init(&bb, 0);
+	memset(&bb_raw, 0, sizeof(struct blob_buf));
+	blob_buf_init(&bb_raw, 0);
 
-	void *array = blobmsg_open_array(&bb, "results");
+	void *array = blobmsg_open_array(&bb_raw, "results");
 
 	if (ctx->path_matched == false) {
-		void *table = blobmsg_open_table(&bb, NULL);
-		blobmsg_add_string(&bb, "path", ctx->requested_path);
-		blobmsg_add_u32(&bb, "fault", 9005);
-		blobmsg_add_string(&bb, "fault_msg", "Invalid parameter name");
-		blobmsg_close_table(&bb, table);
+		void *table = blobmsg_open_table(&bb_raw, NULL);
+		blobmsg_add_string(&bb_raw, "path", ctx->requested_path);
+		blobmsg_add_u32(&bb_raw, "fault", 9005);
+		blobmsg_add_string(&bb_raw, "fault_msg", "Invalid parameter name");
+		blobmsg_close_table(&bb_raw, table);
 	} else {
 		blobmsg_for_each_attr(attr, ctx->tmp_bb.head, remaining) {
 
@@ -195,20 +196,33 @@ static void prepare_and_send_response(struct async_request_context *ctx)
 				if (is_reference_value(fields[3])) {
 					char data[MAX_VALUE_LENGTH] = {0};
 					resolve_reference_path(ctx, fields[1], data, sizeof(data));
-					fill_blob_param(&bb, fields[0], data, fields[2], fields[3]);
+					fill_blob_param(&bb_raw, fields[0], data, fields[2], fields[3]);
 				} else {
-					blobmsg_add_blob(&bb, attr);
+					blobmsg_add_blob(&bb_raw, attr);
 				}
 			} else {
-				blobmsg_add_blob(&bb, attr);
+				blobmsg_add_blob(&bb_raw, attr);
 			}
 		}
 	}
 
-	blobmsg_close_array(&bb, array);
+	blobmsg_close_array(&bb_raw, array);
 
-	ubus_send_reply(ctx->ubus_ctx, &ctx->request_data, bb.head);
-	blob_buf_free(&bb);
+	if (strcmp(ctx->ubus_method, "get") == 0 && ctx->raw_format == false) { // Pretty Format
+		struct blob_buf bb_pretty = {0};
+
+		memset(&bb_pretty, 0, sizeof(struct blob_buf));
+		blob_buf_init(&bb_pretty, 0);
+
+		prepare_pretty_response(ctx->requested_path, bb_raw.head, &bb_pretty);
+
+		ubus_send_reply(ctx->ubus_ctx, &ctx->request_data, bb_pretty.head);
+		blob_buf_free(&bb_pretty);
+	} else { // Raw Format
+		ubus_send_reply(ctx->ubus_ctx, &ctx->request_data, bb_raw.head);
+	}
+
+	blob_buf_free(&bb_raw);
 }
 
 void send_response(struct async_request_context *ctx)
@@ -224,21 +238,6 @@ void send_response(struct async_request_context *ctx)
 	ubus_complete_deferred_request(ctx->ubus_ctx, &ctx->request_data, UBUS_STATUS_OK);
 	blob_buf_free(&ctx->tmp_bb);
 	BBFDM_FREE(ctx);
-}
-
-static struct blob_attr *get_results_array(struct blob_attr *msg)
-{
-	struct blob_attr *tb[1] = {0};
-	const struct blobmsg_policy p[1] = {
-			{ "results", BLOBMSG_TYPE_ARRAY }
-	};
-
-	if (msg == NULL)
-		return NULL;
-
-	blobmsg_parse(p, 1, tb, blobmsg_data(msg), blobmsg_len(msg));
-
-	return tb[0];
 }
 
 static void append_response_data(struct ubus_request_tracker *tracker, struct blob_attr *msg)

@@ -32,25 +32,60 @@ unsigned int get_proto_type(const char *proto)
 	return type;
 }
 
-unsigned int get_proto_type_option_value(struct blob_attr *msg)
+static bool is_raw_format_type(const char *format)
 {
-	struct blob_attr *tb[1] = {0};
-	const struct blobmsg_policy p[1] = {
-			{ "proto", BLOBMSG_TYPE_STRING }
+	bool raw_format = false;
+
+	if (format) {
+		if (strcmp(format, "raw") == 0)
+			raw_format = true;
+		else
+			raw_format = false;
+	}
+
+	return raw_format;
+}
+
+void fill_optional_input(struct blob_attr *msg, unsigned int *proto, bool *raw_format)
+{
+	struct blob_attr *tb[2] = {0};
+	const struct blobmsg_policy p[2] = {
+			{ "proto", BLOBMSG_TYPE_STRING },
+			{ "format", BLOBMSG_TYPE_STRING }
 	};
-	int proto = BBFDMD_BOTH;
+
+	*proto = BBFDMD_BOTH;
+	*raw_format = false;
 
 	if (!msg)
-		return proto;
+		return;
 
-	blobmsg_parse(p, 1, tb, blobmsg_data(msg), blobmsg_len(msg));
+	blobmsg_parse(p, 2, tb, blobmsg_data(msg), blobmsg_len(msg));
 
 	if (tb[0]) {
 		const char *val = blobmsg_get_string(tb[0]);
-		proto = get_proto_type(val);
+		*proto = get_proto_type(val);
 	}
 
-	return proto;
+	if (tb[1]) {
+		const char *val = blobmsg_get_string(tb[1]);
+		*raw_format = is_raw_format_type(val);
+	}
+}
+
+struct blob_attr *get_results_array(struct blob_attr *msg)
+{
+	struct blob_attr *tb[1] = {0};
+	const struct blobmsg_policy p[1] = {
+			{ "results", BLOBMSG_TYPE_ARRAY }
+	};
+
+	if (msg == NULL)
+		return NULL;
+
+	blobmsg_parse(p, 1, tb, blobmsg_data(msg), blobmsg_len(msg));
+
+	return tb[0];
 }
 
 bool proto_matches(unsigned int dm_type, const enum bbfdmd_type_enum type)

@@ -30,7 +30,11 @@ enum bbfdmd_type_enum {
 };
 
 unsigned int get_proto_type(const char *proto);
-unsigned int get_proto_type_option_value(struct blob_attr *msg);
+
+void fill_optional_input(struct blob_attr *msg, unsigned int *proto, bool *raw_format);
+
+struct blob_attr *get_results_array(struct blob_attr *msg);
+
 bool proto_matches(unsigned int dm_type, const enum bbfdmd_type_enum type);
 
 char *get_reference_data(const char *path, const char *method_name);

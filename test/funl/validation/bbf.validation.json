@@ -17,6 +17,38 @@
             },
             "rc": 0
         },
+		{
+		    "method": "get",
+		    "args": {
+		        "path": "Device.DeviceInfo.Manufacturer",
+		        "optional": {"format":"raw", "proto":"usp"}
+		    },
+		    "rc": 0
+		},
+		{
+		    "method": "get",
+		    "args": {
+		        "path": "Device.DeviceInfo.Manufacturer",
+		        "optional": {"format":"raw", "proto":"cwmp"}
+		    },
+		    "rc": 0
+		},
+		{
+		    "method": "get",
+		    "args": {
+		        "path": "Device.DeviceInfo.Manufacturer",
+		        "optional": {"format":"pretty", "proto":"usp"}
+		    },
+		    "rc": 0
+		},
+		{
+		    "method": "get",
+		    "args": {
+		        "path": "Device.DeviceInfo.Manufacturer",
+		        "optional": {"format":"pretty", "proto":"cwmp"}
+		    },
+		    "rc": 0
+		},
         {
             "method": "get",
             "args": {
