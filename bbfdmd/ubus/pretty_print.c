@@ -48,17 +48,6 @@ enum dmt_type_enum {
 	__DMT_INVALID
 };
 
-static void strncpyt(char *dst, const char *src, size_t n)
-{
-	if (dst == NULL || src == NULL)
-		return;
-
-	if (n > 1) {
-		strncpy(dst, src, n - 1);
-		dst[n - 1] = 0;
-	}
-}
-
 static void add_pv_list(const char *para, const char *val, const char *type, struct list_head *pv_list)
 {
 	struct pvNode *node = NULL;
@@ -238,9 +227,9 @@ static bool get_next_element(char *path, char *param)
 	len = strlen(path);
 	ptr = strchr(path, DELIM);
 	if (ptr)
-		strncpyt(param, path, (size_t)labs(ptr - path) + 1);
+		bbfdm_strncpy(param, path, (size_t)labs(ptr - path) + 1);
 	else
-		strncpyt(param, path, len + 1);
+		bbfdm_strncpy(param, path, len + 1);
 
 	return true;
 }
@@ -385,7 +374,7 @@ static bool add_paths_to_stack(struct blob_buf *bb, char *path, size_t begin,
 		parsed_len += strlen(key) + 1;
 		ptr += strlen(key) + 1;
 		if (is_leaf_element(ptr)) {
-			strncpyt(param, path, begin + parsed_len + 1);
+			bbfdm_strncpy(param, path, begin + parsed_len + 1);
 			if (is_node_instance(key))
 				c = blobmsg_open_table(bb, NULL);
 			else
@@ -396,7 +385,7 @@ static bool add_paths_to_stack(struct blob_buf *bb, char *path, size_t begin,
 			add_data_blob(bb, ptr, pv->val, pv->type);
 			break;
 		}
-		strncpyt(param, pv->param, begin + parsed_len + 1);
+		bbfdm_strncpy(param, pv->param, begin + parsed_len + 1);
 		if (is_node_instance(ptr))
 			c = blobmsg_open_array(bb, key);
 		else

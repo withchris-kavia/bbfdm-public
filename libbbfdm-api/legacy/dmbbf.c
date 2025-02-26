@@ -927,6 +927,36 @@ static bool is_same_reference_path(const char *curr_value, const char *in_value,
 		return false;
 	}
 
+	char *in_value_list = strchr(in_value, ',');
+	if (in_value_list) {
+		char formatted_value[2048] = {0};
+		long int pos = 0;
+
+		DM_STRNCPY(buf, in_value, sizeof(buf));
+
+		formatted_value[0] = '\0';
+
+		for (pch = strtok_r(buf, ",", &pchr); pch != NULL; pch = strtok_r(NULL, ",", &pchr)) {
+
+			if (formatted_value[0] == '\0') {
+				pos += snprintf(formatted_value, sizeof(formatted_value), "%s", pch);
+			} else {
+				pos += snprintf(&formatted_value[pos], sizeof(formatted_value) - pos, ";%s", pch);
+			}
+
+			char *delimiter_pos = DM_STRSTR(formatted_value, "=>");
+			if (delimiter_pos) {
+				pos = labs(delimiter_pos - formatted_value);
+				*delimiter_pos = '\0';
+			}
+		}
+
+		if (strcmp(curr_value, formatted_value) == 0)
+			return true;
+		else
+			return false;
+	}
+
 	DM_STRNCPY(buf, curr_value, sizeof(buf));
 
 	for (pch = strtok_r(buf, ",", &pchr); pch != NULL; pch = strtok_r(NULL, ",", &pchr)) {
