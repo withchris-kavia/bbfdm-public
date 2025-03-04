@@ -105,7 +105,7 @@ char *dmuci_list_to_string(struct uci_list *list, const char *delimitor)
 {
 	if (list) {
 		struct uci_element *e = NULL;
-		char list_val[512] = {0};
+		char list_val[4096] = {0};
 		unsigned pos = 0;
 
 		list_val[0] = 0;
