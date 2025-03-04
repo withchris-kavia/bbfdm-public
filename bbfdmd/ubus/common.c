@@ -190,7 +190,7 @@ void run_sync_call(const char *ubus_obj, const char *ubus_method, struct blob_at
 		BBFDM_FREE(json_str);		
 	}
 
-	BBFDM_UBUS_INVOKE_SYNC(ubus_obj, ubus_method, req_buf.head, 2000, sync_callback, bb_response);
+	BBFDM_UBUS_INVOKE_SYNC(ubus_obj, ubus_method, req_buf.head, 5000, sync_callback, bb_response);
 
 	blob_buf_free(&req_buf);
 }
