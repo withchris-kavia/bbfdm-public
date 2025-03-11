@@ -19,7 +19,7 @@
 #define BBFDM_MICROSERVICE_INPUT_PATH "/etc/bbfdm/services"
 #define MAX_PATH_LENGTH 1024
 #define MAX_VALUE_LENGTH 1024 * 4
-#define SERVICE_CALL_TIMEOUT 5000 // 5 secs
+#define SERVICE_CALL_TIMEOUT 10000 // 10 secs
 #define SERVICE_CALL_OPERATE_TIMEOUT 1800000 // 30 mins
 
 enum bbfdmd_type_enum {
