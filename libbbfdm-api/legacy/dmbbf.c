@@ -1623,7 +1623,7 @@ static int get_datatype(char *type)
 static int mparam_set_value(DMPARAM_ARGS)
 {
 	char refparam[MAX_DM_PATH] = {0};
-	char param_value[2048] = {0};
+	char param_value[4096] = {0};
 	char *value = dmstrdup("");
 
 	snprintf(refparam, MAX_DM_PATH, "%s%s", node->current_object, leaf->parameter);

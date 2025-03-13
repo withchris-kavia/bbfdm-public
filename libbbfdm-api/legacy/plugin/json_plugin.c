@@ -1424,7 +1424,7 @@ static int uci_set_value(json_object *mapping_obj, int json_version, char *refpa
 	struct json_object *list_name = NULL;
 	struct json_object *linker_jobj = NULL;
 	char *opt_temp = NULL;
-	char buf_value[1024] = {0};
+	char buf_value[4096] = {0};
 	int res = 0;
 
 	json_object_object_get_ex(mapping_obj, "uci", &uci_obj);
@@ -1598,7 +1598,7 @@ static int uci_v1_set_value(json_object *mapping_obj, int json_version, char *re
 {
 	struct json_object *data_s = NULL;
 	struct json_object *key = NULL, *list = NULL, *linker_jobj = NULL;
-	char buf_value[1024] = {0};
+	char buf_value[4096] = {0};
 
 	json_object_object_get_ex(mapping_obj, "data", &data_s);
 	json_object_object_get_ex(mapping_obj, "key", &key);
