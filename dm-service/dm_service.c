@@ -72,7 +72,7 @@ int main(int argc, char **argv)
 	// Set process name for the current process
 	prctl(PR_SET_NAME, proc_name, NULL, NULL, NULL);
 
-	BBF_INFO("Waiting on uloop....");
+	BBF_ERR("# Check force re-compile, waiting on uloop....");
 	uloop_run();
 
 exit:

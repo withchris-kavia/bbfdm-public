@@ -912,6 +912,7 @@ int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
 
 	bbfdm_ctx_init(bbfdm_ctx);
 
+	BBF_ERR("######## Re-compile check BBFDM ###############");
 	err = load_micro_service_config(&bbfdm_ctx->config);
 	if (err) {
 		BBF_ERR("Failed to load micro-service config");
