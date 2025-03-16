@@ -207,7 +207,7 @@ int main(int argc, char **argv)
 			if (optarg) {
 				g_log_level = (int)strtod(optarg, NULL);
 				if (g_log_level < 0 || g_log_level > 7)
-					g_log_level = 3;
+					g_log_level = 7;
 			}
 			break;
 		case 'h':
@@ -251,7 +251,7 @@ int main(int argc, char **argv)
 	uloop_run();
 
 end:
-	BBFDM_ERR("Free context");
+	BBFDM_DEBUG("BBFDMD exits");
 	unregister_services();
 	uloop_done();
 	ubus_shutdown(&ubus_ctx);

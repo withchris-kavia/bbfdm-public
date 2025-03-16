@@ -42,7 +42,7 @@ int main(int argc, char **argv)
 			if (optarg) {
 				log_level = (int)strtod(optarg, NULL);
 				if (log_level < 0 || log_level > 7)
-					log_level = 3;
+					log_level = 7;
 			}
 			break;
 		case 'h':

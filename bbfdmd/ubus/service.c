@@ -80,7 +80,7 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 
 	uint32_t ubus_id;
 	if (ubus_lookup_id(ubus_ctx, service_name, &ubus_id)) {
-		BBFDM_ERR("Failed to lookup UBUS object: %s", service_name);
+		BBFDM_WARNING("Failed to lookup UBUS object: %s", service_name);
 	}
 
 	json_object *unified_daemon_jobj = NULL;
