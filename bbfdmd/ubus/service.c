@@ -209,7 +209,13 @@ void list_registered_services(struct blob_buf *bb)
 			void *obj_table = blobmsg_open_table(bb, NULL);
 			blobmsg_add_string(bb, "parent_dm", service->objects[i].parent_path);
 			blobmsg_add_string(bb, "object", service->objects[i].object_name);
-			blobmsg_add_string(bb, "proto", service->objects[i].protocol == BBFDMD_USP ? "usp" : service->objects[i].protocol == BBFDMD_CWMP ? "cwmp" : "both");
+			if (service->protocol == BBFDMD_USP) {
+				blobmsg_add_string(bb, "proto", "usp");
+			} else if (service->protocol == BBFDMD_CWMP) {
+				blobmsg_add_string(bb, "proto", "cwmp");
+			} else {
+				blobmsg_add_string(bb, "proto", service->objects[i].protocol == BBFDMD_USP ? "usp" : service->objects[i].protocol == BBFDMD_CWMP ? "cwmp" : "both");
+			}
 			blobmsg_close_table(bb, obj_table);
 		}
 		blobmsg_close_array(bb, objects_array);
