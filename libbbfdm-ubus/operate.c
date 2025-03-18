@@ -29,8 +29,10 @@ void bbfdm_operate_cmd(bbfdm_data_t *data, void *output)
 
 	fault = bbfdm_cmd_exec(&data->bbf_ctx, BBF_OPERATE);
 	if (fault) {
+		void *fault_table = blobmsg_open_table(&data->bbf_ctx.bb, NULL);
 		blobmsg_add_u32(&data->bbf_ctx.bb, "fault", fault);
 		bb_add_string(&data->bbf_ctx.bb, "fault_msg", data->bbf_ctx.fault_msg);
+		blobmsg_close_table(&data->bbf_ctx.bb, fault_table);
 	}
 
 	blobmsg_close_array(&data->bbf_ctx.bb, output_array);
