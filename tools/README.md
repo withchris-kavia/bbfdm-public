@@ -96,7 +96,7 @@ $ ./tools/validate_json_plugin.py test/files/etc/bbfdm/json/TEST.json
 $ ./tools/validate_json_plugin.py tools/datamodel.json
 ```
 
-More examples available in [this path](../test/files/usr/share/bbfdm/plugins).
+More examples available in [this path](../test/files/usr/share/bbfdm/micro_services/core).
 
 ### generate_dm.sh
 
