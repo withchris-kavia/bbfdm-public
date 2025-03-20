@@ -71,10 +71,6 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 
 		// Send linker cleanup event for all services
 		send_linker_cleanup_event(ctx);
-
-		// Event handler to wait for linker response
-		context->linker_handler.cb = linker_response_callback;
-		ubus_register_event_handler(ctx, &context->linker_handler, "bbfdm.linker.response");
 	}
 
 	fill_optional_input(tb[BBFDM_INPUT], &requested_proto, &context->raw_format);

@@ -222,22 +222,6 @@ int bbf_set_alias(struct dmctx *ctx, struct uci_section *s, const char *option_n
 	return 0;
 }
 
-static void send_linker_request_event(struct ubus_context *ctx, const char *path)
-{
-	struct blob_buf bb;
-
-	if (DM_STRLEN(path) == 0)
-		return;
-
-	memset(&bb, 0, sizeof(struct blob_buf));
-	blob_buf_init(&bb, 0);
-
-	blobmsg_add_string(&bb, "path", path);
-
-	ubus_send_event(ctx, "bbfdm.linker.request", bb.head);
-	blob_buf_free(&bb);
-}
-
 int bbfdm_get_references(struct dmctx *ctx, int match_action, const char *base_path, const char *key_name, char *key_value, char *out, size_t out_len)
 {
 	char param_path[1024] = {0};
@@ -286,8 +270,6 @@ int bbfdm_get_references(struct dmctx *ctx, int match_action, const char *base_p
 	}
 
 	snprintf(param_path, sizeof(param_path), "%s[%s==\"%s\"].", base_path, key_name, key_value);
-
-	send_linker_request_event(ctx->ubus_ctx, param_path);
 
 	snprintf(&out[len], out_len - len, "%s%s", len ? (match_action == MATCH_FIRST ? "," : ";") : "", param_path);
 

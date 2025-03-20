@@ -122,15 +122,23 @@ static void resolve_reference_path(struct async_request_context *ctx, struct blo
 		// Search for token in the linker list
 		struct linker_args *linker = NULL;
 		bool linker_found = false;
+		bool linker_empty = false;
 		list_for_each_entry(linker, &ctx->linker_list, list) {
-			if (strcmp(linker->path, token) == 0 && linker->value[0] != '\0') {
-				pos += snprintf(&output[pos], output_len - pos, "%s,", linker->value);
+			if (strcmp(linker->path, token) == 0) {
 				linker_found = true;
+
+				if (linker->value[0] != '\0') {
+					pos += snprintf(&output[pos], output_len - pos, "%s,", linker->value);
+				} else {
+					linker_empty = true;
+				}
+
 				break;
 			}
 		}
 
 		if (linker_found) {
+			if (linker_empty) continue;
 			if (!is_ref_list) break;
 			continue;
 		}
@@ -230,7 +238,6 @@ void send_response(struct async_request_context *ctx)
 	prepare_and_send_response(ctx);
 
 	if (strcmp(ctx->ubus_method, "get") == 0) {
-		ubus_unregister_event_handler(ctx->ubus_ctx, &ctx->linker_handler);
 		send_linker_cleanup_event(ctx->ubus_ctx);
 		free_linker_entries(ctx);
 	}
@@ -367,23 +374,3 @@ void send_linker_cleanup_event(struct ubus_context *ctx)
 	blob_buf_free(&bb);
 }
 
-void linker_response_callback(struct ubus_context *ctx __attribute__((unused)), struct ubus_event_handler *ev, const char *type __attribute__((unused)), struct blob_attr *msg)
-{
-	struct async_request_context *context = NULL;
-	struct blob_attr *attr = NULL;
-	size_t rem = 0;
-
-	if (!msg)
-		return;
-
-	context = container_of(ev, struct async_request_context, linker_handler);
-	if (context == NULL) {
-		BBFDM_ERR("Failed to get the request context");
-		return;
-	}
-
-	blobmsg_for_each_attr(attr, msg, rem) {
-		BBFDM_DEBUG("LINKER RESPONSE: '%s' <=> '%s'", blobmsg_name(attr), blobmsg_get_string(attr));
-		add_linker_entry(context, blobmsg_name(attr), blobmsg_get_string(attr));
-	}
-}

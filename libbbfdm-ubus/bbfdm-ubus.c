@@ -766,19 +766,6 @@ static int regiter_ubus_object(struct ubus_context *ctx)
 	return ubus_add_object(ctx, &bbf_object);
 }
 
-static void send_linker_response_event(struct ubus_context *ctx, const char *reference_path, const char *reference_value)
-{
-	struct blob_buf bb;
-
-	memset(&bb, 0, sizeof(struct blob_buf));
-	blob_buf_init(&bb, 0);
-
-	bb_add_string(&bb, reference_path, reference_value ? reference_value : "");
-
-	ubus_send_event(ctx, "bbfdm.linker.response", bb.head);
-	blob_buf_free(&bb);
-}
-
 static void bbfdm_linker_cb(struct ubus_context *ctx, struct ubus_event_handler *ev,
 				const char *type, struct blob_attr *msg)
 {
@@ -796,36 +783,6 @@ static void bbfdm_linker_cb(struct ubus_context *ctx, struct ubus_event_handler 
 	if (strcmp(type, "bbfdm.linker.cleanup") == 0) {
 		//BBF_ERR("bbfdm.linker.cleanup");
 		free_pv_list(&u->linker_list);
-	} else if (strcmp(type, "bbfdm.linker.request") == 0) {
-		//BBF_ERR("bbfdm.linker.request");
-
-		struct dmctx bbf_ctx = {0};
-		struct blob_attr *tb[1] = {0};
-		const struct blobmsg_policy p[1] = {
-				{ "path", BLOBMSG_TYPE_STRING }
-		};
-
-		blobmsg_parse(p, 1, tb, blobmsg_data(msg), blobmsg_len(msg));
-
-		char *reference_path = tb[0] ? blobmsg_get_string(tb[0]) : "";
-
-		if (DM_STRLEN(reference_path) == 0)
-			return;
-
-		if (!match_with_path_list(&u->obj_list, reference_path))
-			return;
-
-		if (present_in_pv_list(&u->linker_list, reference_path))
-			return;
-
-		bbf_init(&bbf_ctx);
-
-		char *reference_value = get_value_by_reference_path(&bbf_ctx, reference_path);
-
-		add_pv_list(reference_path, reference_value, NULL, &u->linker_list);
-		send_linker_response_event(ctx, reference_path, reference_value);
-
-		bbf_cleanup(&bbf_ctx);
 	}
 }
 
@@ -932,7 +889,7 @@ int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
 	if (err != 0)
 		return err;
 
-	return ubus_register_event_handler(&bbfdm_ctx->ubus_ctx, &bbfdm_linker_handler, "bbfdm.linker.*");
+	return ubus_register_event_handler(&bbfdm_ctx->ubus_ctx, &bbfdm_linker_handler, "bbfdm.linker.cleanup");
 }
 
 int bbfdm_ubus_regiter_free(struct bbfdm_context *bbfdm_ctx)
