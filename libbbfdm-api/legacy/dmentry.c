@@ -229,6 +229,9 @@ int bbf_entry_method(struct dmctx *ctx, int cmd)
 	case BBF_EVENT:
 		fault = dm_entry_event(ctx);
 		break;
+	case BBF_REFERENCES_DB:
+		fault = dm_entry_references_db(ctx);
+		break;
 	}
 
 	return bbf_fault_map(ctx, fault);

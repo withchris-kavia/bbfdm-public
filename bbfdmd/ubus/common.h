@@ -37,8 +37,6 @@ struct blob_attr *get_results_array(struct blob_attr *msg);
 
 bool proto_matches(unsigned int dm_type, const enum bbfdmd_type_enum type);
 
-char *get_reference_data(const char *path, const char *method_name);
-
 void run_sync_call(const char *ubus_obj, const char *ubus_method, struct blob_attr *msg, struct blob_buf *bb_response);
 
 #endif /* BBFDMD_COMMON_H */

@@ -190,6 +190,17 @@ int dmuci_get_section_type(const char *package, const char *section, char **valu
 	return 0;
 }
 
+/**** UCI SECTION EXIST *****/
+struct uci_section *dmuci_get_section(const char *package, const char *section)
+{
+	struct uci_ptr ptr = {0};
+
+	if (dmuci_lookup_ptr(uci_ctx, &ptr, package, section, NULL, NULL))
+		return NULL;
+
+	return ptr.s;
+}
+
 int dmuci_get_option_value_string(const char *package, const char *section, const char *option, char **value)
 {
 	struct uci_ptr ptr = {0};

@@ -273,6 +273,7 @@ enum {
 	BBF_DEL_OBJECT,
 	BBF_OPERATE,
 	BBF_EVENT,
+	BBF_REFERENCES_DB
 };
 
 enum {

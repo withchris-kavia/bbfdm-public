@@ -887,123 +887,91 @@ static char *get_default_value_by_type(const char *param_name, int type)
 	}
 }
 
-static void convert_to_regex(const char *input, char *output)
-{
-	int j = 0;
-
-	for (int i = 0; input[i] != '\0'; i++) {
-		if (input[i] == '.') {
-			output[j++] = '\\';  // Escape '.'
-			output[j++] = '.';
-		} else if (input[i] == '*') {
-			output[j++] = '[';   // Replace '*' with '[^.]+'
-			output[j++] = '^';
-			output[j++] = '.';
-			output[j++] = ']';
-			output[j++] = '+';
-		} else {
-			output[j++] = input[i];  // Copy other characters
-		}
-	}
-
-	output[j++] = '.';  // Allow anything after the base match
-	output[j++] = '*';
-	output[j] = '\0';   // Null-terminate the string
-}
-
-static bool is_same_reference_path(const char *curr_value, const char *in_value, char *out, size_t out_len)
+static bool is_same_reference_path(const char *curr_value, const char *in_value)
 {
 	char *pch = NULL, *pchr = NULL;
+	char resolved_path[2048] = {0};
 	char buf[2048] = {0};
+	unsigned pos = 0;
 
-	if (!curr_value || !in_value || !out || !out_len)
+	if (!curr_value || !in_value)
 		return false;
 
 	if (strcmp(curr_value, in_value) == 0)
 		return true;
 
-	if (DM_STRLEN(in_value) == 0) {
-		DM_STRNCPY(out, "=>", sizeof(out_len));
-		return false;
-	}
-
-	char *in_value_list = strchr(in_value, ',');
-	if (in_value_list) {
-		char formatted_value[2048] = {0};
-		long int pos = 0;
-
-		DM_STRNCPY(buf, in_value, sizeof(buf));
-
-		formatted_value[0] = '\0';
-
-		for (pch = strtok_r(buf, ",", &pchr); pch != NULL; pch = strtok_r(NULL, ",", &pchr)) {
-
-			if (formatted_value[0] == '\0') {
-				pos += snprintf(formatted_value, sizeof(formatted_value), "%s", pch);
-			} else {
-				pos += snprintf(&formatted_value[pos], sizeof(formatted_value) - pos, ";%s", pch);
-			}
-
-			char *delimiter_pos = DM_STRSTR(formatted_value, "=>");
-			if (delimiter_pos) {
-				pos = labs(delimiter_pos - formatted_value);
-				*delimiter_pos = '\0';
-			}
-		}
-
-		if (strcmp(curr_value, formatted_value) == 0)
-			return true;
-		else
-			return false;
-	}
-
 	DM_STRNCPY(buf, curr_value, sizeof(buf));
 
-	for (pch = strtok_r(buf, ",", &pchr); pch != NULL; pch = strtok_r(NULL, ",", &pchr)) {
+	char *is_list = strchr(buf, ';');
+
+	for (pch = strtok_r(buf, is_list ? ";" : ",", &pchr);
+			pch != NULL;
+			pch = strtok_r(NULL, is_list ? ";" : ",", &pchr)) {
 
 		char *p = strchr(pch, '[');
 		if (p) {
-			char regex_pattern[MAX_DM_PATH * 2] = {0};
-			char path[MAX_DM_PATH] = {0};
-			char key_name[256], key_value[256];
-			regmatch_t pmatch[2];
-			regmatch_t p_match[1];
+			char hash_str[9] = {0};
+			char *uci_val = NULL;
 
-			if (!match(pch, "\\[(.*?)\\]", 2, pmatch))
-				continue;
+			calculate_hash(pch, hash_str, sizeof(hash_str));
 
-			snprintf(path, pmatch[0].rm_so + 1, "%s", pch);
-			int len = DM_STRLEN(path);
-			if (!len)
-				continue;
+			dmuci_get_option_value_string_bbfdm("reference_translation", "reference_path", hash_str, &uci_val);
 
-			char *match_str = pch + pmatch[1].rm_so;
-			if (DM_STRLEN(match_str) == 0)
-				continue;
-
-			int n = sscanf(match_str, "%255[^=]==\"%255[^\"]\"", key_name, key_value);
-			if (n != 2) {
-				n = sscanf(match_str, "%255[^=]==%255[^]]", key_name, key_value);
-				if (n != 2)
-					continue;
-			}
-
-			char *tag = strstr(in_value, "=>");
-			if (!tag)
-				continue;
-
-			convert_to_regex(path, regex_pattern);
-
-			if (match(in_value, regex_pattern, 1, p_match) && strncmp(key_value, tag + 2, strlen(key_value)) == 0) {
-				return true;
+			if (DM_STRLEN(uci_val)) {
+				pos += snprintf(&resolved_path[pos], sizeof(resolved_path) - pos, "%s,", uci_val);
 			}
 		} else {
-			if (strncmp(pch, in_value, strlen(pch)) == 0)
-				return true;
+			pos += snprintf(&resolved_path[pos], sizeof(resolved_path) - pos, "%s,", pch);
 		}
+
+		if (pos != 0 && is_list == false)
+			break;
 	}
 
+	if (pos > 0) {
+		resolved_path[pos - 1] = 0; // Remove trailing comma
+	}
+
+	if (strcmp(resolved_path, in_value) == 0)
+		return true;
+
 	return false;
+}
+
+static int convert_path_with_star(const char *full_obj, char *out_str, size_t out_len)
+{
+	char str[1024] = {0};
+	char *pch, *pchr;
+	size_t pos = 0;
+
+	DM_STRNCPY(str, full_obj, sizeof(str));
+
+	for (pch = strtok_r(str, ".", &pchr); pch != NULL; pch = strtok_r(NULL, ".", &pchr)) {
+		const char *part = isdigit_str(pch) ? "*" : pch;
+		int written = snprintf(out_str + pos, out_len - pos, "%s.", part);
+		if (written < 0 || written >= (int)(out_len - pos)) {
+			return -1; // overflow
+		}
+		pos += written;
+	}
+
+	return 0;
+}
+
+static void set_references(const char *parent_path, const char *current_path, const char *key_name, const char *key_value, char *out_str, size_t out_len)
+{
+	char linker[MAX_DM_PATH * 2] = {0};
+	char hash_str[9] = {0};
+
+	convert_path_with_star(parent_path, out_str, out_len);
+
+	snprintf(linker, sizeof(linker), "%s[%s==%s].", out_str, key_name, DM_STRLEN(key_value) ? key_value : "");
+	calculate_hash(linker, hash_str, sizeof(hash_str));
+	DM_STRNCPY(out_str, current_path, strlen(current_path));
+	dmuci_set_value_bbfdm("reference_translation", "reference_path", hash_str, out_str);
+
+	calculate_hash(out_str, hash_str, sizeof(hash_str));
+	dmuci_set_value_bbfdm("reference_translation", "reference_value", hash_str, DM_STRLEN(key_value) ? key_value : "#");
 }
 
 /* **********
@@ -1032,6 +1000,12 @@ static int get_value_param(DMPARAM_ARGS)
 	}
 
 	fill_blob_param(&dmctx->bb, full_param, value, DMT_TYPE[leaf->type], leaf->dm_flags);
+
+	if (leaf->dm_flags & DM_FLAG_LINKER) {
+		// Update reference path  & value
+		set_references(node->parent->current_object, node->current_object, leaf->parameter, value, full_param, sizeof(full_param));
+	}
+
 	return 0;
 }
 
@@ -1065,6 +1039,11 @@ static int mparam_get_value_in_param(DMPARAM_ARGS)
 	}
 
 	fill_blob_param(&dmctx->bb, full_param, value, DMT_TYPE[leaf->type], leaf->dm_flags);
+
+	if (leaf->dm_flags & DM_FLAG_LINKER) {
+		// Update reference path  & value
+		set_references(node->parent->current_object, node->current_object, leaf->parameter, value, full_param, sizeof(full_param));
+	}
 
 	dmctx->findparam = (dmctx->iswildcard) ? 1 : 0;
 	dmctx->stop = (dmctx->iswildcard) ? false : true;
@@ -1663,22 +1642,13 @@ static int mparam_set_value(DMPARAM_ARGS)
 			return 0;
 		}
 	} else if (leaf->dm_flags & DM_FLAG_REFERENCE) {
-		if (is_same_reference_path(value, dmctx->in_value, param_value, sizeof(param_value))) {
+		if (is_same_reference_path(value, dmctx->in_value)) {
 			BBF_DEBUG("Requested value (%s) is same as current value (%s)..", dmctx->in_value, value);
 			return 0;
 		}
 	} else {
-		int len = DM_STRLEN(param_value);
-
-		// Remove linker value from the provided value if it is not marked as reference value 'Device.XXX.=>XX##'
-		if (len > 7 && DM_STRNCMP(param_value, ROOT_NODE, strlen(ROOT_NODE)) == 0 &&
-				param_value[len - 1] == '#' && param_value[len - 2] == '#') {
-			char *p = DM_STRSTR(param_value, "=>");
-			if (p) *p = 0;
-		}
-
-		if (DM_STRCMP(value, param_value) == 0) {
-			BBF_DEBUG("Requested value (%s) is same as current value (%s)...", param_value, value);
+		if (DM_STRCMP(dmctx->in_value, value) == 0) {
+			BBF_DEBUG("Requested value (%s) is same as current value (%s)...", dmctx->in_value, value);
 			return 0;
 		}
 	}
@@ -1971,4 +1941,64 @@ int dm_entry_event(struct dmctx *dmctx)
 	err = dm_browse(dmctx, &node, root, NULL, NULL);
 
 	return (dmctx->stop) ? err : USP_FAULT_INVALID_PATH;
+}
+
+/* **********
+ * get instances data base
+ * **********/
+static int mobj_get_references_db(DMOBJECT_ARGS)
+{
+	struct uci_section *ref_s = NULL;
+
+	ref_s = dmuci_get_section_bbfdm("reference_translation", "reference_path");
+	if (ref_s == NULL) {
+		dmuci_add_section_bbfdm("reference_translation", "reference_path", &ref_s);
+		dmuci_rename_section_by_section(ref_s, "reference_path");
+	}
+
+	ref_s = dmuci_get_section_bbfdm("reference_translation", "reference_value");
+	if (ref_s == NULL) {
+		dmuci_add_section_bbfdm("reference_translation", "reference_value", &ref_s);
+		dmuci_rename_section_by_section(ref_s, "reference_value");
+	}
+
+	return 0;
+}
+
+static int mparam_get_references_db(DMPARAM_ARGS)
+{
+	if (node->is_instanceobj == 0)
+		return 0;
+
+	if (leaf->dm_flags & DM_FLAG_LINKER) {
+		char full_param[MAX_DM_PATH] = {0};
+		char *value = dmstrdup("");
+
+		snprintf(full_param, sizeof(full_param), "%s%s", node->current_object, leaf->parameter);
+
+		(leaf->getvalue)(full_param, dmctx, data, instance, &value);
+
+		set_references(node->parent->current_object, node->current_object, leaf->parameter, value, full_param, sizeof(full_param));
+	}
+
+	return 0;
+}
+
+int dm_entry_references_db(struct dmctx *ctx)
+{
+	DMOBJ *root = ctx->dm_entryobj;
+	DMNODE node = {.current_object = ""};
+	int err = 0;
+
+	ctx->inparam_isparam = 0;
+	ctx->findparam = 1;
+	ctx->stop = 0;
+	ctx->checkobj = NULL;
+	ctx->checkleaf = NULL;
+	ctx->method_obj = mobj_get_references_db;
+	ctx->method_param = mparam_get_references_db;
+
+	err = dm_browse(ctx, &node, root, NULL, NULL);
+
+	return (ctx->findparam == 0) ? err : 0;
 }

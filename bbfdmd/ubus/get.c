@@ -82,6 +82,41 @@ static void fill_blob_param(struct blob_buf *bb, struct blob_attr *path, const c
 	blobmsg_close_table(bb, table);
 }
 
+// Function to calculate FNV-1 hash
+static void calculate_hash(const char *input, char *output, size_t out_len)
+{
+#define FNV_OFFSET_BASIS 0x811C9DC5
+#define FNV_PRIME 0x1000193
+
+	uint32_t hash = FNV_OFFSET_BASIS;
+
+	while (*input != '\0') {
+		hash *= FNV_PRIME;      // Multiply hash by prime
+		hash ^= (uint8_t)(*input); // XOR with current character
+		input++;
+	}
+
+	snprintf(output, out_len, "%08X", hash);
+}
+
+static int _uci_get_option_str(struct uci_context *uci_ctx,
+		const char *package, const char *section, const char *option,
+		char *out, size_t out_len)
+{
+	struct uci_ptr ptr = {0};
+	char buf[128] = {0};
+
+	snprintf(buf, sizeof(buf), "%s.%s.%s", package, section, option);
+
+	if (uci_lookup_ptr(uci_ctx, &ptr, buf, true) != UCI_OK)
+		return -1;
+
+	if (ptr.o && ptr.o->type == UCI_TYPE_STRING)
+		snprintf(out, out_len, "%s", ptr.o->v.string);
+
+	return 0;
+}
+
 static void resolve_reference_path(struct async_request_context *ctx, struct blob_attr *data, char *output, size_t output_len)
 {
 	if (!ctx || !output || output_len == 0) {
@@ -145,16 +180,19 @@ static void resolve_reference_path(struct async_request_context *ctx, struct blo
 
 		// If not found, attempt to resolve via micro-services
 		{
-			// Try to get reference value from micro-services directly
-			char *reference_path = get_reference_data(token, "reference_path");
+			char reference_path[1024] = {0};
+			char hash_str[9] = {0};
+
+			calculate_hash(token, hash_str, sizeof(hash_str));
+
+			_uci_get_option_str(ctx->uci_ctx, "reference_translation", "reference_path", hash_str, reference_path, sizeof(reference_path));
 
 			// Add path to list in order to be used by other parameters
-			add_linker_entry(ctx, token, reference_path ? reference_path : "");
+			add_linker_entry(ctx, token, reference_path);
 
 			// Reference value is found
-			if (reference_path != NULL) {
+			if (strlen(reference_path) != 0) {
 				pos += snprintf(&output[pos], output_len - pos, "%s,", reference_path);
-				BBFDM_FREE(reference_path);
 				if (!is_ref_list) break;
 			}
 		}
@@ -189,7 +227,6 @@ static void prepare_and_send_response(struct async_request_context *ctx)
 		blobmsg_close_table(&bb_raw, table);
 	} else {
 		blobmsg_for_each_attr(attr, ctx->tmp_bb.head, remaining) {
-
 			if (strcmp(ctx->ubus_method, "get") == 0) {
 				struct blob_attr *fields[4];
 				const struct blobmsg_policy policy[4] = {
@@ -235,15 +272,29 @@ static void prepare_and_send_response(struct async_request_context *ctx)
 
 void send_response(struct async_request_context *ctx)
 {
+	if (strcmp(ctx->ubus_method, "get") == 0) {
+		// Init linker list for only Get method
+		INIT_LIST_HEAD(&ctx->linker_list);
+
+		// Init uci context for only Get method
+		ctx->uci_ctx = uci_alloc_context();
+		if (ctx->uci_ctx) uci_set_confdir(ctx->uci_ctx, "/etc/bbfdm/dmmap/");
+	}
+
 	prepare_and_send_response(ctx);
 
 	if (strcmp(ctx->ubus_method, "get") == 0) {
-		send_linker_cleanup_event(ctx->ubus_ctx);
+		// Free uci context for only Get method
+		if (ctx->uci_ctx) uci_free_context(ctx->uci_ctx);
+
+		// Free linker list for only Get method
 		free_linker_entries(ctx);
 	}
 
 	ubus_complete_deferred_request(ctx->ubus_ctx, &ctx->request_data, UBUS_STATUS_OK);
 	blob_buf_free(&ctx->tmp_bb);
+
+	BBFDM_INFO("END: ubus method|%s|, name|bbfdm|", ctx->ubus_method);
 	BBFDM_FREE(ctx);
 }
 
@@ -363,14 +414,3 @@ void run_async_call(struct async_request_context *ctx, const char *ubus_obj, str
 
 	blob_buf_free(&req_buf);
 }
-
-void send_linker_cleanup_event(struct ubus_context *ctx)
-{
-	struct blob_buf bb = {0};
-
-	memset(&bb, 0, sizeof(struct blob_buf));
-	blob_buf_init(&bb, 0);
-	ubus_send_event(ctx, "bbfdm.linker.cleanup", bb.head);
-	blob_buf_free(&bb);
-}
-

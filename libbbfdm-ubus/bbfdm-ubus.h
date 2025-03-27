@@ -27,8 +27,6 @@ struct bbfdm_context {
 	bbfdm_config_t config;
 	struct ubus_context ubus_ctx;
 	struct list_head event_handlers;
-	struct list_head linker_list;
-	struct list_head obj_list;
 };
 
 struct ev_handler_node {

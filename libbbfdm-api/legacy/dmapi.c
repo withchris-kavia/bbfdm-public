@@ -264,12 +264,12 @@ int bbfdm_get_references(struct dmctx *ctx, int match_action, const char *base_p
 		return 0;
 	}
 
-	if (out_len - len < strlen(base_path) + strlen(key_name) + strlen(key_value) + 9) { // 9 = 'path[key_name==\"key_value\"].'
+	if (out_len - len < strlen(base_path) + strlen(key_name) + strlen(key_value) + 7) { // 7 = 'path[key_name=="key_value"].'
 		BBF_ERR("Buffer overflow detected. The output buffer is not large enough to hold the additional data!!!");
 		return -1;
 	}
 
-	snprintf(param_path, sizeof(param_path), "%s[%s==\"%s\"].", base_path, key_name, key_value);
+	snprintf(param_path, sizeof(param_path), "%s[%s==%s].", base_path, key_name, key_value);
 
 	snprintf(&out[len], out_len - len, "%s%s", len ? (match_action == MATCH_FIRST ? "," : ";") : "", param_path);
 
@@ -289,27 +289,27 @@ int _bbfdm_get_references(struct dmctx *ctx, const char *base_path, const char *
 
 int bbfdm_get_reference_linker(struct dmctx *ctx, char *reference_path, struct dm_reference *reference_args)
 {
-	if (DM_STRLEN(reference_path) == 0) {
-		bbfdm_set_fault_message(ctx, "%s: reference path should not be empty", __func__);
+	char hash_str[9] = {0};
+	char *uci_val = NULL;
+
+	if (!reference_path || !reference_args)
 		return -1;
-	}
 
 	reference_args->path = reference_path;
 
-	char *separator = strstr(reference_path, "=>");
-	if (!separator) {
-		bbfdm_set_fault_message(ctx, "%s: reference path must contain '=>' symbol to separate the path and value", __func__);
-		return -1;
-	}
+	if (DM_STRLEN(reference_args->path) == 0)
+		return 0;
 
-	*separator = 0;
+	calculate_hash(reference_path, hash_str, sizeof(hash_str));
 
-	reference_args->value = separator + 2;
+	int res = dmuci_get_option_value_string_bbfdm("reference_translation", "reference_value", hash_str, &uci_val);
 
-	char *valid_path = strstr(separator + 2, "##");
-	if (valid_path) {
+	if (uci_val && uci_val[0] == '#' && uci_val[1] == '\0') {
+		reference_args->value = uci_val;
 		reference_args->is_valid_path = true;
-		*valid_path = 0;
+	} else {
+		reference_args->value = uci_val;
+		reference_args->is_valid_path = (res == 0) ? true : false;
 	}
 
 	return 0;
