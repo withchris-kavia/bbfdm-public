@@ -66,13 +66,6 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 	memset(&context->tmp_bb, 0, sizeof(struct blob_buf));
 	blob_buf_init(&context->tmp_bb, 0);
 
-	if (strcmp(method, "get") == 0) {
-		INIT_LIST_HEAD(&context->linker_list);
-
-		// Send linker cleanup event for all services
-		send_linker_cleanup_event(ctx);
-	}
-
 	fill_optional_input(tb[BBFDM_INPUT], &requested_proto, &context->raw_format);
 
 	ubus_defer_request(ctx, req, &context->request_data);

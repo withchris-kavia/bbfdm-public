@@ -140,7 +140,7 @@ function install_ethmngr_as_micro_service()
 	install_libeasy
 	install_libethernet
 
-	exec_cmd git clone https://dev.iopsys.eu/hal/ethmngr.git /opt/dev/ethmngr
+	exec_cmd git clone -b redesign_reference https://dev.iopsys.eu/hal/ethmngr.git /opt/dev/ethmngr
 	exec_cmd make -C /opt/dev/ethmngr
 	exec_cmd cp -f /opt/dev/ethmngr/ethmngr /usr/sbin/ethmngr
 }

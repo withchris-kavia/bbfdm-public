@@ -66,15 +66,6 @@ int bbfdm_load_internal_plugin(struct bbfdm_context *bbfdm_ctx, DM_MAP_OBJ *dyna
 			return -1;
 		}
 
-		if (dynamic_obj[i].root_obj != NULL && bbfdm_ctx != NULL) {
-			struct dm_obj_s *entryobj = dynamic_obj[i].root_obj;
-			for (; (entryobj && entryobj->obj); entryobj++) {
-				char path[MAX_DM_PATH] = {0};
-				snprintf(path, sizeof(path), "%s%s.", node_obj, entryobj->obj);
-				add_path_list(path, &bbfdm_ctx->obj_list);
-			}
-		}
-
 		node_obj[len-1] = 0;
 
 		dm_entryobj[i].obj = node_obj;
@@ -195,10 +186,6 @@ static int bbfdm_load_json_plugin(struct bbfdm_context *bbfdm_ctx, struct list_h
 			BBF_ERR("ERROR: Obj name is empty for (%s) Object\n", node_obj);
 			return -1;
 		}
-
-		char path[MAX_DM_PATH] = {0};
-		snprintf(path, sizeof(path), "%s%s.", obj_prefix, obj_name);
-		add_path_list(path, &bbfdm_ctx->obj_list);
 
 		// Remove '.' from object prefix
 		if (obj_prefix[obj_prefix_len - 1] == '.')

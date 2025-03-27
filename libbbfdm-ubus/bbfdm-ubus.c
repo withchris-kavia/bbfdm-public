@@ -36,9 +36,6 @@ static void bbfdm_ctx_cleanup(struct bbfdm_context *u)
 {
 	bbf_global_clean(DEAMON_DM_ROOT_OBJ);
 
-	free_path_list(&u->linker_list);
-	free_path_list(&u->obj_list);
-
 	/* DotSo Plugin */
 	bbfdm_free_dotso_plugin(u, &deamon_lib_handle);
 
@@ -73,42 +70,6 @@ static void fill_optional_data(bbfdm_data_t *data, struct blob_attr *msg)
 		data->bbf_ctx.dm_type = get_proto_type(val);
 		BBF_DEBUG("Proto:|%s|", (data->bbf_ctx.dm_type == BBFDM_BOTH) ? "both" : (data->bbf_ctx.dm_type == BBFDM_CWMP) ? "cwmp" : "usp");
 	}
-}
-
-static char *get_value_by_reference_path(struct dmctx *ctx, char *reference_path)
-{
-	char path[MAX_DM_PATH] = {0};
-	char key_name[256], key_value[256];
-	char *reference_value = NULL;
-	regmatch_t pmatch[2];
-
-	if (!ctx || !reference_path)
-		return NULL;
-
-	if (!match(reference_path, "\\[(.*?)\\]", 2, pmatch))
-		return NULL;
-
-	snprintf(path, pmatch[0].rm_so + 1, "%s", reference_path);
-	int len = DM_STRLEN(path);
-	if (!len)
-		return NULL;
-
-	char *match_str = reference_path + pmatch[1].rm_so;
-	if (DM_STRLEN(match_str) == 0)
-		return NULL;
-
-	int n = sscanf(match_str, "%255[^=]==\"%255[^\"]\"", key_name, key_value);
-	if (n != 2) {
-		n = sscanf(match_str, "%255[^=]==%255[^]]", key_name, key_value);
-		if (n != 2)
-			return NULL;
-	}
-
-	snprintf(path + len, sizeof(path) - len, "*.%s", key_name);
-
-	adm_entry_get_reference_param(ctx, path, key_value, &reference_value);
-
-	return reference_value;
 }
 
 static void async_req_free(struct bbfdm_async_req *r)
@@ -621,114 +582,6 @@ int bbfdm_del_handler(struct ubus_context *ctx, struct ubus_object *obj,
 	return 0;
 }
 
-int bbfdm_ref_path_handler(struct ubus_context *ctx, struct ubus_object *obj,
-			struct ubus_request_data *req, const char *method,
-			struct blob_attr *msg)
-{
-	struct blob_attr *tb[__DM_GET_MAX];
-	struct bbfdm_context *u;
-	struct pvNode *node = NULL;
-	struct blob_buf bb;
-	bool reference_value_found = false;
-
-	if (blobmsg_parse(dm_get_policy, __DM_GET_MAX, tb, blob_data(msg), blob_len(msg))) {
-		BBF_ERR("Failed to parse blob");
-		return UBUS_STATUS_UNKNOWN_ERROR;
-	}
-
-	if (!tb[DM_GET_PATH])
-		return UBUS_STATUS_INVALID_ARGUMENT;
-
-	u = container_of(ctx, struct bbfdm_context, ubus_ctx);
-	if (u == NULL) {
-		BBF_ERR("failed to get the bbfdm context");
-		return UBUS_STATUS_UNKNOWN_ERROR;
-	}
-
-	BBFDM_INFO("ubus method|%s|, name|%s|", method, obj->name);
-
-	char *path = blobmsg_get_string(tb[DM_GET_PATH]);
-
-	if (!match_with_path_list(&u->obj_list, path))
-		return UBUS_STATUS_INVALID_ARGUMENT;
-
-	memset(&bb, 0, sizeof(struct blob_buf));
-	blob_buf_init(&bb, 0);
-
-	list_for_each_entry(node, &u->linker_list, list) {
-		if (strcmp(node->param, path) == 0) {
-			bb_add_string(&bb, "data", node->val);
-			reference_value_found = true;
-			break;
-		}
-	}
-
-	if (!reference_value_found) {
-		struct dmctx bbf_ctx = {0};
-
-		bbf_init(&bbf_ctx);
-		char *reference_path = get_value_by_reference_path(&bbf_ctx, path);
-
-		add_pv_list(path, reference_path, NULL, &u->linker_list);
-		bb_add_string(&bb, "data", reference_path ? reference_path : "");
-
-		bbf_cleanup(&bbf_ctx);
-	}
-
-	ubus_send_reply(ctx, req, bb.head);
-	blob_buf_free(&bb);
-
-	return 0;
-}
-
-int bbfdm_ref_value_handler(struct ubus_context *ctx, struct ubus_object *obj,
-			struct ubus_request_data *req, const char *method,
-			struct blob_attr *msg)
-{
-	struct blob_attr *tb[__DM_GET_MAX];
-	struct bbfdm_context *u;
-	struct dmctx bbf_ctx = {0};
-	char *reference_value = NULL;
-	struct blob_buf bb;
-
-	if (blobmsg_parse(dm_get_policy, __DM_GET_MAX, tb, blob_data(msg), blob_len(msg))) {
-		BBF_ERR("Failed to parse blob");
-		return UBUS_STATUS_UNKNOWN_ERROR;
-	}
-
-	if (!tb[DM_GET_PATH])
-		return UBUS_STATUS_INVALID_ARGUMENT;
-
-	u = container_of(ctx, struct bbfdm_context, ubus_ctx);
-	if (u == NULL) {
-		BBF_ERR("failed to get the bbfdm context");
-		return UBUS_STATUS_UNKNOWN_ERROR;
-	}
-
-	BBFDM_INFO("ubus method|%s|, name|%s|", method, obj->name);
-
-	char *reference_path = blobmsg_get_string(tb[DM_GET_PATH]);
-
-	if (!match_with_path_list(&u->obj_list, reference_path))
-		return UBUS_STATUS_INVALID_ARGUMENT;
-
-	memset(&bb, 0, sizeof(struct blob_buf));
-	blob_buf_init(&bb, 0);
-
-	bbf_init(&bbf_ctx);
-
-	adm_entry_get_reference_value(&bbf_ctx, reference_path, &reference_value);
-
-	bb_add_string(&bb, "data", reference_value ? reference_value : "");
-
-	bbf_cleanup(&bbf_ctx);
-
-	ubus_send_reply(ctx, req, bb.head);
-	blob_buf_free(&bb);
-
-	return 0;
-}
-
 static struct ubus_method bbf_methods[] = {
 	UBUS_METHOD("get", bbfdm_get_handler, dm_get_policy),
 	UBUS_METHOD("schema", bbfdm_schema_handler, dm_schema_policy),
@@ -736,9 +589,7 @@ static struct ubus_method bbf_methods[] = {
 	UBUS_METHOD("set", bbfdm_set_handler, dm_set_policy),
 	UBUS_METHOD("operate", bbfdm_operate_handler, dm_operate_policy),
 	UBUS_METHOD("add", bbfdm_add_handler, dm_add_policy),
-	UBUS_METHOD("del", bbfdm_del_handler, dm_del_policy),
-	UBUS_METHOD("reference_path", bbfdm_ref_path_handler, dm_get_policy),
-	UBUS_METHOD("reference_value", bbfdm_ref_value_handler, dm_get_policy),
+	UBUS_METHOD("del", bbfdm_del_handler, dm_del_policy)
 };
 
 static struct ubus_object_type bbf_type = UBUS_OBJECT_TYPE("", bbf_methods);
@@ -766,30 +617,8 @@ static int regiter_ubus_object(struct ubus_context *ctx)
 	return ubus_add_object(ctx, &bbf_object);
 }
 
-static void bbfdm_linker_cb(struct ubus_context *ctx, struct ubus_event_handler *ev,
-				const char *type, struct blob_attr *msg)
-{
-	if (!type || !msg)
-		return;
-
-	struct bbfdm_context *u;
-
-	u = container_of(ctx, struct bbfdm_context, ubus_ctx);
-	if (u == NULL) {
-		BBF_ERR("failed to get the bbfdm context");
-		return;
-	}
-
-	if (strcmp(type, "bbfdm.linker.cleanup") == 0) {
-		//BBF_ERR("bbfdm.linker.cleanup");
-		free_pv_list(&u->linker_list);
-	}
-}
-
 static void bbfdm_ctx_init(struct bbfdm_context *bbfdm_ctx)
 {
-	INIT_LIST_HEAD(&bbfdm_ctx->linker_list);
-	INIT_LIST_HEAD(&bbfdm_ctx->obj_list);
 	INIT_LIST_HEAD(&bbfdm_ctx->event_handlers);
 }
 
@@ -852,8 +681,6 @@ static int load_micro_service_data_model(struct bbfdm_context *daemon_ctx)
 	return 0;
 }
 
-static struct ubus_event_handler bbfdm_linker_handler = { .cb = bbfdm_linker_cb };
-
 int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
 {
 	int err = 0;
@@ -861,7 +688,7 @@ int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
 	err = ubus_connect_ctx(&bbfdm_ctx->ubus_ctx, NULL);
 	if (err != UBUS_STATUS_OK) {
 		BBF_ERR("Failed to connect to ubus");
-		return -5;  // Error code -5 indicating that ubus_ctx is connected
+		return -5;  // Error code -5 indicating that ubus_ctx is not connected
 	}
 
 	uloop_init();
@@ -885,11 +712,7 @@ int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
 	if (err != UBUS_STATUS_OK)
 		return -1;
 
-	err = register_events_to_ubus(&bbfdm_ctx->ubus_ctx, &bbfdm_ctx->event_handlers);
-	if (err != 0)
-		return err;
-
-	return ubus_register_event_handler(&bbfdm_ctx->ubus_ctx, &bbfdm_linker_handler, "bbfdm.linker.cleanup");
+	return register_events_to_ubus(&bbfdm_ctx->ubus_ctx, &bbfdm_ctx->event_handlers);
 }
 
 int bbfdm_ubus_regiter_free(struct bbfdm_context *bbfdm_ctx)

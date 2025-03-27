@@ -19,154 +19,6 @@
 
 extern int g_log_level;
 
-static void add_linker_entry(struct async_request_context *ctx, const char *linker_path, const char *linker_value)
-{
-	struct linker_args *linker = calloc(1, sizeof(struct linker_args));
-	if (!linker)
-		return;
-
-	list_add_tail(&linker->list, &ctx->linker_list);
-	linker->path = strdup(linker_path ? linker_path : "");
-	linker->value = strdup(linker_value ? linker_value : "");
-}
-
-static void free_linker_entries(struct async_request_context *ctx)
-{
-	struct linker_args *linker = NULL, *tmp = NULL;
-
-	list_for_each_entry_safe(linker, tmp, &ctx->linker_list, list) {
-		list_del(&linker->list);
-		BBFDM_FREE(linker->path);
-		BBFDM_FREE(linker->value);
-		BBFDM_FREE(linker);
-	}
-}
-
-static bool is_reference_value(struct blob_attr *flags)
-{
-	struct blob_attr *flag = NULL;
-	int rem = 0;
-
-	if (!flags || blobmsg_type(flags) != BLOBMSG_TYPE_ARRAY)
-		return false;
-
-	blobmsg_for_each_attr(flag, flags, rem) {
-		if (strcmp(blobmsg_get_string(flag), "Reference") == 0)
-			return true;
-	}
-
-	return false;
-}
-
-static void fill_blob_param(struct blob_buf *bb, struct blob_attr *path, const char *data, struct blob_attr *type, struct blob_attr *flags)
-{
-	if (!bb || !path || !data || !type)
-		return;
-
-	void *table = blobmsg_open_table(bb, NULL);
-
-	if (path) {
-		blobmsg_add_field(bb, blobmsg_type(path), blobmsg_name(path), blobmsg_data(path), blobmsg_len(path));
-	}
-
-	blobmsg_add_string(bb, "data", data);
-
-	if (type) {
-		blobmsg_add_field(bb, blobmsg_type(type), blobmsg_name(type), blobmsg_data(type), blobmsg_len(type));
-	}
-
-	if (flags) {
-		blobmsg_add_field(bb, blobmsg_type(flags), blobmsg_name(flags), blobmsg_data(flags), blobmsg_len(flags));
-	}
-
-	blobmsg_close_table(bb, table);
-}
-
-static void resolve_reference_path(struct async_request_context *ctx, struct blob_attr *data, char *output, size_t output_len)
-{
-	if (!ctx || !output || output_len == 0) {
-		BBFDM_ERR("Invalid arguments");
-		return;
-	}
-
-	output[0] = 0; // Ensure output buffer is initialized
-
-	if (!data) {
-		BBFDM_ERR("Invalid data value");
-		return;
-	}
-
-	char *ref_path = blobmsg_get_string(data);
-	if (!ref_path || ref_path[0] == '\0') // Empty reference path, nothing to resolve
-		return;
-
-	char buffer[MAX_VALUE_LENGTH] = {0};
-	snprintf(buffer, sizeof(buffer), "%s", ref_path);
-
-	// Check if it is a reference path (separator ',') or list paths (separator ';')
-	bool is_ref_list = strchr(ref_path, ';') != NULL;
-	char *token = NULL, *saveptr = NULL;
-	unsigned pos = 0;
-
-	for (token = strtok_r(buffer, is_ref_list ? ";" : ",", &saveptr);
-		token;
-		token = strtok_r(NULL, is_ref_list ? ";" : ",", &saveptr)) {
-
-		// If token does not contain '[', it’s a direct reference
-		if (!strchr(token, '[')) {
-			pos += snprintf(&output[pos], output_len - pos, "%s,", token);
-			if (!is_ref_list) break;
-			continue;
-		}
-
-		// Search for token in the linker list
-		struct linker_args *linker = NULL;
-		bool linker_found = false;
-		bool linker_empty = false;
-		list_for_each_entry(linker, &ctx->linker_list, list) {
-			if (strcmp(linker->path, token) == 0) {
-				linker_found = true;
-
-				if (linker->value[0] != '\0') {
-					pos += snprintf(&output[pos], output_len - pos, "%s,", linker->value);
-				} else {
-					linker_empty = true;
-				}
-
-				break;
-			}
-		}
-
-		if (linker_found) {
-			if (linker_empty) continue;
-			if (!is_ref_list) break;
-			continue;
-		}
-
-		// If not found, attempt to resolve via micro-services
-		{
-			// Try to get reference value from micro-services directly
-			char *reference_path = get_reference_data(token, "reference_path");
-
-			// Add path to list in order to be used by other parameters
-			add_linker_entry(ctx, token, reference_path ? reference_path : "");
-
-			// Reference value is found
-			if (reference_path != NULL) {
-				pos += snprintf(&output[pos], output_len - pos, "%s,", reference_path);
-				BBFDM_FREE(reference_path);
-				if (!is_ref_list) break;
-			}
-		}
-	}
-
-	if (pos > 0) {
-		output[pos - 1] = 0; // Remove trailing comma
-	} else {
-		BBFDM_INFO("Can't resolve reference path '%s' -> Set its value to empty", ref_path);
-	}
-}
-
 static void prepare_and_send_response(struct async_request_context *ctx)
 {
 	struct blob_attr *attr = NULL;
@@ -189,28 +41,7 @@ static void prepare_and_send_response(struct async_request_context *ctx)
 		blobmsg_close_table(&bb_raw, table);
 	} else {
 		blobmsg_for_each_attr(attr, ctx->tmp_bb.head, remaining) {
-
-			if (strcmp(ctx->ubus_method, "get") == 0) {
-				struct blob_attr *fields[4];
-				const struct blobmsg_policy policy[4] = {
-					{ "path", BLOBMSG_TYPE_STRING },
-					{ "data", BLOBMSG_TYPE_STRING },
-					{ "type", BLOBMSG_TYPE_STRING },
-					{ "flags", BLOBMSG_TYPE_ARRAY },
-				};
-
-				blobmsg_parse(policy, 4, fields, blobmsg_data(attr), blobmsg_len(attr));
-
-				if (is_reference_value(fields[3])) {
-					char data[MAX_VALUE_LENGTH] = {0};
-					resolve_reference_path(ctx, fields[1], data, sizeof(data));
-					fill_blob_param(&bb_raw, fields[0], data, fields[2], fields[3]);
-				} else {
-					blobmsg_add_blob(&bb_raw, attr);
-				}
-			} else {
-				blobmsg_add_blob(&bb_raw, attr);
-			}
+			blobmsg_add_blob(&bb_raw, attr);
 		}
 	}
 
@@ -236,11 +67,6 @@ static void prepare_and_send_response(struct async_request_context *ctx)
 void send_response(struct async_request_context *ctx)
 {
 	prepare_and_send_response(ctx);
-
-	if (strcmp(ctx->ubus_method, "get") == 0) {
-		send_linker_cleanup_event(ctx->ubus_ctx);
-		free_linker_entries(ctx);
-	}
 
 	ubus_complete_deferred_request(ctx->ubus_ctx, &ctx->request_data, UBUS_STATUS_OK);
 	blob_buf_free(&ctx->tmp_bb);
@@ -363,14 +189,3 @@ void run_async_call(struct async_request_context *ctx, const char *ubus_obj, str
 
 	blob_buf_free(&req_buf);
 }
-
-void send_linker_cleanup_event(struct ubus_context *ctx)
-{
-	struct blob_buf bb = {0};
-
-	memset(&bb, 0, sizeof(struct blob_buf));
-	blob_buf_init(&bb, 0);
-	ubus_send_event(ctx, "bbfdm.linker.cleanup", bb.head);
-	blob_buf_free(&bb);
-}
-

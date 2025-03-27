@@ -214,6 +214,7 @@ struct dmctx {
 typedef struct dmnode {
 	DMOBJ *obj;
 	struct dmnode *parent;
+	struct uci_section *idb_s;
 	char *current_object;
 	void *prev_data;
 	char *prev_instance;

@@ -28,7 +28,6 @@ struct linker_args {
 struct async_request_context {
 	struct ubus_context *ubus_ctx;
 	struct ubus_request_data request_data;
-	struct list_head linker_list;
 	struct blob_buf tmp_bb;
 	bool service_list_processed;
 	bool path_matched;
@@ -44,8 +43,6 @@ struct ubus_request_tracker {
 	struct uloop_timeout timeout;
 	char request_name[128];
 };
-
-void send_linker_cleanup_event(struct ubus_context *ctx);
 
 void run_async_call(struct async_request_context *ctx, const char *ubus_obj, struct blob_attr *msg);
 void send_response(struct async_request_context *ctx);

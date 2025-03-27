@@ -417,6 +417,23 @@ static int dm_browse_leaf(struct dmctx *dmctx, DMNODE *parent_node, DMLEAF *leaf
 	return err;
 }
 
+static struct uci_section *get_uci_instance_db_section(const char *object, const char *sec_name)
+{
+	struct uci_section *idb_s = NULL;
+	char hash_str[9] = {0};
+
+	calculate_hash(object, hash_str, sizeof(hash_str));
+
+	idb_s = dmuci_get_section_bbfdm("instance_db", hash_str);
+	if (idb_s == NULL) {
+		dmuci_add_section_bbfdm("instance_db", sec_name, &idb_s);
+		dmuci_rename_section_by_section(idb_s, hash_str);
+	}
+
+	//BBF_ERR("%s: node.current_object=%s && hash_str=%s && idb_s=%p && section_name=%s", sec_name, object, hash_str, idb_s, section_name(idb_s));
+	return idb_s;
+}
+
 static void dm_browse_entry(struct dmctx *dmctx, DMNODE *parent_node, DMOBJ *entryobj, void *data, char *instance, char *parent_obj, int *err)
 {
 	DMNODE node = {0};
@@ -460,6 +477,7 @@ static void dm_browse_entry(struct dmctx *dmctx, DMNODE *parent_node, DMOBJ *ent
 #endif
 
 	if (entryobj->browseinstobj && !dmctx->isgetschema) {
+		node.idb_s = get_uci_instance_db_section(node.current_object, "idb_parent");
 		entryobj->browseinstobj(dmctx, &node, data, instance);
 		*err = dmctx->faultcode;
 		return;
@@ -547,6 +565,14 @@ int dm_link_inst_obj(struct dmctx *dmctx, DMNODE *parent_node, void *data, char 
 	if (instance == NULL)
 		return -1;
 	dmasprintf(&node.current_object, "%s%s.", parent_obj, instance);
+
+	node.idb_s = get_uci_instance_db_section(node.current_object, "idb_child");
+	dmuci_set_value_by_section_bbfdm(node.idb_s, "instance", instance);
+	struct uci_list *uci_list = NULL;
+	dmuci_get_value_by_section_list(parent_node->idb_s, "idb_child", &uci_list);
+	if (!value_exists_in_uci_list(uci_list, section_name(node.idb_s)))
+		dmuci_add_list_value_by_section(parent_node->idb_s, "idb_child", section_name(node.idb_s));
+
 	if (dmctx->checkobj) {
 		err = dmctx->checkobj(dmctx, &node, prevobj->permission, prevobj->addobj, prevobj->delobj, prevobj->get_linker, data, instance);
 		if (err)
@@ -1029,6 +1055,10 @@ static int get_value_param(DMPARAM_ARGS)
 		value = check_value_by_type(full_param, value, leaf->type);
 	} else {
 		value = get_default_value_by_type(full_param, leaf->type);
+	}
+
+	if ((leaf->dm_flags & DM_FLAG_UNIQUE) && node->is_instanceobj) {
+		dmuci_set_value_by_section_bbfdm(node->idb_s, leaf->parameter, value);
 	}
 
 	fill_blob_param(&dmctx->bb, full_param, value, DMT_TYPE[leaf->type], leaf->dm_flags);

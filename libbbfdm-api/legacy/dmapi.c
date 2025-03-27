@@ -222,23 +222,98 @@ int bbf_set_alias(struct dmctx *ctx, struct uci_section *s, const char *option_n
 	return 0;
 }
 
+int resolve_path(const char *base_path, const char *key_name, char *key_value, char *out, size_t out_len)
+{
+	struct uci_section *idb_s = NULL;
+	struct uci_list *uci_list = NULL;
+	struct uci_element *e = NULL;
+	char hash_str[9] = {0};
+	char *star_pos = strchr(base_path, '*');
+
+	if (!star_pos) {
+		// No wildcard, directly search
+		calculate_hash(base_path, hash_str, sizeof(hash_str));
+
+		idb_s = dmuci_get_section_bbfdm("instance_db", hash_str);
+		if (idb_s == NULL)
+			return -1;
+
+		dmuci_get_value_by_section_list(idb_s, "idb_child", &uci_list);
+		if (uci_list == NULL)
+			return -1;
+
+		uci_foreach_element(uci_list, e) {
+			char *value = NULL;
+
+			dmuci_get_option_value_string_bbfdm("instance_db", e->name, key_name, &value);
+
+			if (DM_STRLEN(value) && DM_STRCMP(value, key_value) == 0) {
+				char *instance = NULL;
+
+				dmuci_get_option_value_string_bbfdm("instance_db", e->name, "instance", &instance);
+
+				if (DM_STRLEN(instance)) {
+					snprintf(out, out_len, "%s%s", base_path, instance);
+				}
+
+				return 0;
+			}
+		}
+
+		return -1;
+	}
+
+	// Split path at first '*'
+	char temp_path[256] = {0};
+
+	DM_STRNCPY(temp_path, base_path, star_pos - base_path + 1);
+	BBF_ERR("## temp_path=%s ##", temp_path);
+
+	calculate_hash(temp_path, hash_str, sizeof(hash_str));
+
+	idb_s = dmuci_get_section_bbfdm("instance_db", hash_str);
+	if (idb_s == NULL)
+		return -1;
+
+	dmuci_get_value_by_section_list(idb_s, "idb_child", &uci_list);
+	if (uci_list == NULL)
+		return -1;
+
+	uci_foreach_element(uci_list, e) {
+		char *instance = NULL;
+
+		// No wildcard, directly search
+		dmuci_get_option_value_string_bbfdm("instance_db", e->name, "instance", &instance);
+
+		if (DM_STRLEN(instance)) {
+			char new_path[512] = {0};
+
+			snprintf(new_path, sizeof(new_path), "%s%s%s", temp_path, instance, star_pos + 1);
+
+			if (resolve_path(new_path, key_name, key_value, out, out_len) == 0)
+				return 0;
+		}
+	}
+
+	return -1;
+}
+
 int bbfdm_get_references(struct dmctx *ctx, int match_action, const char *base_path, const char *key_name, char *key_value, char *out, size_t out_len)
 {
-	char param_path[1024] = {0};
-	char *value = NULL;
+	char ref_value[1024] = {0};
 
 	if (DM_STRLEN(base_path) == 0) {
-		BBF_ERR("Reference base path should not be empty!!!");
+		BBF_ERR("Reference base path is empty. A non-empty base path is required");
 		return -1;
 	}
 
 	if (DM_STRLEN(key_name) == 0) {
-		BBF_ERR("Reference key name should not be empty!!!");
+		BBF_ERR("Reference key name is empty. A valid key name is required");
 		return -1;
 	}
 
 	if (DM_STRLEN(key_value) == 0) {
-		BBF_DEBUG("Reference key value should not be empty!!!");
+		BBF_DEBUG("Reference key value is empty. A valid key value is required");
 		return -1;
 	}
 
@@ -247,32 +322,23 @@ int bbfdm_get_references(struct dmctx *ctx, int match_action, const char *base_p
 		return -1;
 	}
 
-	snprintf(param_path, sizeof(param_path), "%s*.%s", base_path, key_name);
+	size_t len = DM_STRLEN(out);
 
-	adm_entry_get_reference_param(ctx, param_path, key_value, &value);
-
-	size_t len = strlen(out);
-
-	if (DM_STRLEN(value) != 0) {
-
-		if (out_len - len < strlen(value)) {
-			BBF_ERR("Buffer overflow detected. The output buffer is not large enough to hold the additional data!!!");
-			return -1;
-		}
-
-		snprintf(&out[len], out_len - len, "%s%s", len ? (match_action == MATCH_FIRST ? "," : ";") : "", value);
+	if (len > 0 && match_action == MATCH_FIRST) {
+		BBF_ERR("Reference has already been resolved ('%s'). Skipping next possibility ('%s')", out, base_path);
 		return 0;
 	}
 
-	if (out_len - len < strlen(base_path) + strlen(key_name) + strlen(key_value) + 9) { // 9 = 'path[key_name==\"key_value\"].'
-		BBF_ERR("Buffer overflow detected. The output buffer is not large enough to hold the additional data!!!");
+	if (resolve_path(base_path, key_name, key_value, ref_value, sizeof(ref_value)) != 0) {
 		return -1;
 	}
 
-	snprintf(param_path, sizeof(param_path), "%s[%s==\"%s\"].", base_path, key_name, key_value);
+	if (out_len - len < DM_STRLEN(ref_value) + 1) {
+		BBF_ERR("Buffer overflow detected. Output buffer is not large enough to hold the resolved reference value");
+		return -1;
+	}
 
-	snprintf(&out[len], out_len - len, "%s%s", len ? (match_action == MATCH_FIRST ? "," : ";") : "", param_path);
-
+	snprintf(&out[len], out_len - len, "%s%s", len ? "," : "", ref_value);
 	return 0;
 }
 

@@ -239,4 +239,6 @@ long upload_file(const char *file_path, const char *url, const char *username, c
 int get_proto_type(const char *proto);
 bool is_str_eq(const char *s1, const char *s2);
 
+void calculate_hash(const char *input, char *output, size_t out_len);
+
 #endif

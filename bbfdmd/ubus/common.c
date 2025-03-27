@@ -111,33 +111,6 @@ static void sync_callback(struct ubus_request *req, int type __attribute__((unus
 	}
 }
 
-static void generate_reference_to_set(const char *in_value, char *output_str, size_t output_str_len)
-{
-	char token_buffer[MAX_VALUE_LENGTH] = {0};
-	char *token = NULL, *saveptr = NULL;
-	unsigned pos = 0;
-
-	if (!output_str || output_str_len == 0)
-		return;
-
-	output_str[0] = '\0'; // Ensure output buffer is initialized
-
-	if (!in_value || in_value[0] == '\0') // Empty value, nothing to make
-		return;
-
-	bbfdm_strncpy(token_buffer, in_value, sizeof(token_buffer));
-
-	for (token = strtok_r(token_buffer, ",", &saveptr); token; token = strtok_r(NULL, ",", &saveptr)) {
-		char *reference_value = get_reference_data(token, "reference_value");
-		pos += snprintf(&output_str[pos], output_str_len - pos, "%s=>%s##,", token, reference_value ? reference_value : "");
-		BBFDM_FREE(reference_value);
-	}
-
-	if (pos > 0) {
-		output_str[pos - 1] = 0; // Remove trailing comma
-	}
-}
-
 void run_sync_call(const char *ubus_obj, const char *ubus_method, struct blob_attr *msg, struct blob_buf *bb_response)
 {
 	struct blob_buf req_buf = {0};
@@ -151,37 +124,7 @@ void run_sync_call(const char *ubus_obj, const char *ubus_method, struct blob_at
 	blob_buf_init(&req_buf, 0);
 
 	blob_for_each_attr(attr, msg, remaining) {
-		if (strcmp(ubus_method, "set") == 0 &&
-				strcmp(blobmsg_name(attr), "value") == 0 &&
-				blobmsg_type(attr) == BLOBMSG_TYPE_STRING &&
-				strncmp(BBFDM_ROOT_OBJECT, blobmsg_get_string(attr), strlen(BBFDM_ROOT_OBJECT)) == 0) {
-			char reference_to_set[MAX_VALUE_LENGTH] = {0};
-
-			generate_reference_to_set(blobmsg_get_string(attr), reference_to_set, sizeof(reference_to_set));
-			blobmsg_add_string(&req_buf, blobmsg_name(attr), reference_to_set);
-		} if (strcmp(ubus_method, "set") == 0 &&
-				strcmp(blobmsg_name(attr), "obj_path") == 0 &&
-				blobmsg_type(attr) == BLOBMSG_TYPE_TABLE) {
-			struct blob_attr *__attr = NULL;
-			int rem = 0;
-
-			void *table = blobmsg_open_table(&req_buf, "obj_path");
-
-			blobmsg_for_each_attr(__attr, attr, rem) {
-				if (blobmsg_type(__attr) == BLOBMSG_TYPE_STRING && strncmp(BBFDM_ROOT_OBJECT, blobmsg_get_string(__attr), strlen(BBFDM_ROOT_OBJECT)) == 0) {
-					char reference_to_set[MAX_VALUE_LENGTH] = {0};
-
-					generate_reference_to_set(blobmsg_get_string(__attr), reference_to_set, sizeof(reference_to_set));
-					blobmsg_add_string(&req_buf, blobmsg_name(__attr), reference_to_set);
-				} else {
-					blobmsg_add_string(&req_buf, blobmsg_name(__attr), blobmsg_get_string(__attr));
-				}
-			}
-
-			blobmsg_close_table(&req_buf, table);
-		} else {
-			blobmsg_add_field(&req_buf, blobmsg_type(attr), blobmsg_name(attr), blobmsg_data(attr), blobmsg_len(attr));
-		}
+		blobmsg_add_field(&req_buf, blobmsg_type(attr), blobmsg_name(attr), blobmsg_data(attr), blobmsg_len(attr));
 	}
 
 	if (g_log_level == LOG_DEBUG) {
