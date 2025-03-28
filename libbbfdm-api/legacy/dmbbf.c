@@ -424,13 +424,25 @@ static struct uci_section *get_uci_instance_db_section(const char *object, const
 
 	calculate_hash(object, hash_str, sizeof(hash_str));
 
+	// Start timing
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
+
 	idb_s = dmuci_get_section_bbfdm("instance_db", hash_str);
+
+	// End timing
+	clock_gettime(CLOCK_MONOTONIC, &end);
+
+	// Calculate elapsed time
+	double elapsed_time = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+
+	BBF_ERR("bbfdm <=> [%s:instance_db.%s]: Execution time = %.6f seconds\n", object, hash_str, elapsed_time);
+
 	if (idb_s == NULL) {
 		dmuci_add_section_bbfdm("instance_db", sec_name, &idb_s);
 		dmuci_rename_section_by_section(idb_s, hash_str);
 	}
 
-	//BBF_ERR("%s: node.current_object=%s && hash_str=%s && idb_s=%p && section_name=%s", sec_name, object, hash_str, idb_s, section_name(idb_s));
 	return idb_s;
 }
 
