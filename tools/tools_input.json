@@ -107,6 +107,28 @@
     {
       "repo": "https://dev.iopsys.eu/feed/iopsys.git",
       "proto": "git",
+      "version": "hmg",
+      "dm_files": [
+        "hmg/extn/X_HEIMGARD_EU_wifi.json",
+        "hmg/extn/X_HEIMGARD_EU_guest_wifi_5.json",
+        "hmg/extn/X_HEIMGARD_EU_flavour.json",
+        "hmg/extn/X_HEIMGARD_EU.json",
+        "hmg/extn/X_HEIMGARD_EU_extra_info.json",
+        "hmg/extn/X_HEIMGARD_EU_pppoe.json",
+        "hmg/extn/X_HEIMGARD_EU_containers.json",
+        "hmg/extn/X_HEIMGARD_EU_voip.json",
+        "hmg/extn/X_HEIMGARD_EU_parental_control.json",
+        "hmg/extn/X_HEIMGARD_EU_clients.json",
+        "hmg/extn/X_HEIMGARD_EU_CWMP.json",
+        "hmg/extn/X_HEIMGARD_EU_mesh.json",
+        "hmg/extn/X_HEIMGARD_EU_firewall.json",
+        "hmg/extn/X_HEIMGARD_EU_wan.json",
+        "hmg/extn/X_HEIMGARD_EU_guest_wifi_2_4.json"
+      ]
+    },
+    {
+      "repo": "https://dev.iopsys.eu/feed/iopsys.git",
+      "proto": "git",
       "version": "devel",
       "dm_files": [
         "icwmp/files/etc/bbfdm/json/CWMPManagementServer.json",
