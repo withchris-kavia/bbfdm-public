@@ -358,10 +358,12 @@
       "proto": "git",
       "version": "devel",
       "dm_files": [
+        "src/wifidmd.c",
         "src/wifi.c",
         "src/dataelements.c"
       ],
       "extra_dependencies": [
+        "-DWIFIDMD_ENABLE_WIFI_DATAELEMENTS",
         "-lm"
       ]
     },

@@ -98,10 +98,10 @@ function install_wifidmd_as_micro_service()
 {
 	[ -d "/opt/dev/wifidmd" ] && return 0
 
-	exec_cmd git clone -b devel https://dev.iopsys.eu/bbf/wifidmd.git /opt/dev/wifidmd
+	exec_cmd git clone https://dev.iopsys.eu/bbf/wifidmd.git /opt/dev/wifidmd
 
-	exec_cmd make -C /opt/dev/wifidmd/src/ clean && make -C /opt/dev/wifidmd/src/ CFLAGS="-D'BBF_VENDOR_PREFIX=\"X_IOWRT_EU_\"'" WIFIDMD_WIFI_DATAELEMENTS='y'
-	install_ms /opt/dev/wifidmd/src/libwifi.so wifidmd
+	exec_cmd make -C /opt/dev/wifidmd/src/ clean && make -C /opt/dev/wifidmd/src/ WIFIDMD_ENABLE_WIFI_DATAELEMENTS='y'
+	exec_cmd cp -f /opt/dev/wifidmd/src/wifidmd /usr/sbin/
 }
 
 function install_libeasy()
