@@ -72,26 +72,6 @@ static void fill_optional_data(bbfdm_data_t *data, struct blob_attr *msg)
 	}
 }
 
-static int refresh_references_db(unsigned int dm_type)
-{
-	struct dmctx bbf_ctx = {
-		.in_param = ROOT_NODE,
-		.dm_type = dm_type
-	};
-
-	bbf_init(&bbf_ctx);
-	int res = bbfdm_cmd_exec(&bbf_ctx, BBF_REFERENCES_DB);
-
-	if (!res) {
-		// Apply all bbfdm changes
-		dmuci_commit_bbfdm();
-	}
-
-	bbf_cleanup(&bbf_ctx);
-
-	return res;
-}
-
 static void async_req_free(struct bbfdm_async_req *r)
 {
 	free(r);
@@ -397,7 +377,7 @@ int bbfdm_set_handler(struct ubus_context *ctx, struct ubus_object *obj,
 	bbf_cleanup(&data.bbf_ctx);
 
 	if (!fault) {
-		refresh_references_db(data.bbf_ctx.dm_type);
+		bbfdm_refresh_references(data.bbf_ctx.dm_type);
 	}
 
 end:
@@ -532,7 +512,7 @@ end:
 	bbf_cleanup(&data.bbf_ctx);
 
 	if (!fault) {
-		refresh_references_db(data.bbf_ctx.dm_type);
+		bbfdm_refresh_references(data.bbf_ctx.dm_type);
 	}
 
 	ubus_send_reply(ctx, req, data.bb.head);
@@ -621,7 +601,7 @@ int bbfdm_refresh_references_db(struct ubus_context *ctx, struct ubus_object *ob
 	memset(&bb, 0, sizeof(struct blob_buf));
 	blob_buf_init(&bb, 0);
 
-	int res = refresh_references_db(BBFDM_BOTH);
+	int res = bbfdm_refresh_references(BBFDM_BOTH);
 
 	blobmsg_add_u8(&bb, "status", !res ? true : false);
 
@@ -762,7 +742,7 @@ int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
 	if (err != UBUS_STATUS_OK)
 		return -1;
 
-	err = refresh_references_db(BBFDM_BOTH);
+	err = bbfdm_refresh_references(BBFDM_BOTH);
 	if (err) {
 		BBF_ERR("Failed to refresh instance data base");
 		return -1;
@@ -795,4 +775,24 @@ void bbfdm_ubus_set_log_level(int log_level)
 void bbfdm_ubus_load_data_model(DM_MAP_OBJ *DynamicObj)
 {
 	INTERNAL_ROOT_TREE = DynamicObj;
+}
+
+int bbfdm_refresh_references(unsigned int dm_type)
+{
+	struct dmctx bbf_ctx = {
+		.in_param = ROOT_NODE,
+		.dm_type = dm_type
+	};
+
+	bbf_init(&bbf_ctx);
+	int res = bbfdm_cmd_exec(&bbf_ctx, BBF_REFERENCES_DB);
+
+	if (!res) {
+		// Apply all bbfdm changes
+		dmuci_commit_bbfdm();
+	}
+
+	bbf_cleanup(&bbf_ctx);
+
+	return res;
 }
