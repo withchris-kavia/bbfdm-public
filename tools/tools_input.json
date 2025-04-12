@@ -245,7 +245,7 @@
       "proto": "git",
       "version": "devel",
       "dm_files": [
-        "bbf_plugin/qos_bbf.c"
+        "src/qos_bbf.c"
       ]
     },
     {

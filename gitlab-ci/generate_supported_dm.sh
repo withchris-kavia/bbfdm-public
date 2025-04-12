@@ -18,6 +18,7 @@ fi
 install_cmph
 install_libeasy
 install_libethernet
+install_libqos
 
 [ ! -d "${BBFDM_MS_DIR}" ] && mkdir -p "${BBFDM_MS_DIR}"
 rm -rf ${BBFDM_MS_DIR}/*

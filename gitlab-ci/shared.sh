@@ -119,6 +119,21 @@ function install_libeasy()
 	)
 }
 
+function install_libqos()
+{
+	[ -d "/opt/dev/libqos" ] && return 0
+
+	exec_cmd git clone https://dev.iopsys.eu/hal/libqos.git /opt/dev/libqos
+	(
+
+		cd /opt/dev/libqos
+		exec_cmd make
+		mkdir -p /usr/include/
+		cp -a libqos*.so* /usr/lib/
+		cp -a include/*.h /usr/include/
+	)
+}
+
 function install_libethernet()
 {
 	[ -d "/opt/dev/libethernet" ] && return 0
@@ -139,6 +154,7 @@ function install_ethmngr_as_micro_service()
 
 	install_libeasy
 	install_libethernet
+	install_libqos
 
 	exec_cmd git clone https://dev.iopsys.eu/hal/ethmngr.git /opt/dev/ethmngr
 	exec_cmd make -C /opt/dev/ethmngr
