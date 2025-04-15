@@ -306,6 +306,8 @@ static int bbfdm_instances_handler(struct ubus_context *ctx, struct ubus_object 
 
 	fill_optional_data(&data, tb[DM_INSTANCES_OPTIONAL]);
 
+	bbfdm_refresh_references(data.bbf_ctx.dm_type, obj->name);
+
 	bbfdm_get(&data, BBF_INSTANCES);
 
 	free_path_list(&paths_list);
@@ -377,7 +379,7 @@ int bbfdm_set_handler(struct ubus_context *ctx, struct ubus_object *obj,
 	bbf_cleanup(&data.bbf_ctx);
 
 	if (!fault) {
-		bbfdm_refresh_references(data.bbf_ctx.dm_type);
+		bbfdm_refresh_references(data.bbf_ctx.dm_type, obj->name);
 	}
 
 end:
@@ -512,7 +514,7 @@ end:
 	bbf_cleanup(&data.bbf_ctx);
 
 	if (!fault) {
-		bbfdm_refresh_references(data.bbf_ctx.dm_type);
+		bbfdm_refresh_references(data.bbf_ctx.dm_type, obj->name);
 	}
 
 	ubus_send_reply(ctx, req, data.bb.head);
@@ -601,7 +603,7 @@ int bbfdm_refresh_references_db(struct ubus_context *ctx, struct ubus_object *ob
 	memset(&bb, 0, sizeof(struct blob_buf));
 	blob_buf_init(&bb, 0);
 
-	int res = bbfdm_refresh_references(BBFDM_BOTH);
+	int res = bbfdm_refresh_references(BBFDM_BOTH, obj->name);
 
 	blobmsg_add_u8(&bb, "status", !res ? true : false);
 
@@ -742,7 +744,7 @@ int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
 	if (err != UBUS_STATUS_OK)
 		return -1;
 
-	err = bbfdm_refresh_references(BBFDM_BOTH);
+	err = bbfdm_refresh_references(BBFDM_BOTH, bbfdm_ctx->config.out_name);
 	if (err) {
 		BBF_ERR("Failed to refresh instance data base");
 		return -1;
@@ -777,10 +779,15 @@ void bbfdm_ubus_load_data_model(DM_MAP_OBJ *DynamicObj)
 	INTERNAL_ROOT_TREE = DynamicObj;
 }
 
-int bbfdm_refresh_references(unsigned int dm_type)
+int bbfdm_refresh_references(unsigned int dm_type, const char *srv_obj_name)
 {
+	char hash_str[9] = {0};
+
+	calculate_hash(srv_obj_name, hash_str, sizeof(hash_str));
+
 	struct dmctx bbf_ctx = {
 		.in_param = ROOT_NODE,
+		.in_value = hash_str,
 		.dm_type = dm_type
 	};
 
@@ -788,8 +795,12 @@ int bbfdm_refresh_references(unsigned int dm_type)
 	int res = bbfdm_cmd_exec(&bbf_ctx, BBF_REFERENCES_DB);
 
 	if (!res) {
-		// Apply all bbfdm changes
-		dmuci_commit_bbfdm();
+		char config_name[32] = {0};
+
+		snprintf(config_name, sizeof(config_name), "%s", "bbfdm_reference_db");
+
+		// Apply all changes
+		dmuci_commit_package_varstate(config_name);
 	}
 
 	bbf_cleanup(&bbf_ctx);

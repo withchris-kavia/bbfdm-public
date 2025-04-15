@@ -322,6 +322,7 @@ struct uci_section *dmuci_walk_all_sections(const char *package, struct uci_sect
 int dmuci_get_option_value_string_bbfdm(const char *package, const char *section, const char *option, char **value);
 int dmuci_set_value_bbfdm(const char *package, const char *section, const char *option, const char *value);
 int dmuci_set_value_by_section_bbfdm(struct uci_section *s, const char *option, const char *value);
+int dmuci_add_list_value_bbfdm(const char *package, const char *section, const char *option, const char *value);
 int dmuci_add_section_bbfdm(const char *package, const char *stype, struct uci_section **s);
 int dmuci_delete_bbfdm(const char *package, const char *section, const char *option, const char *value);
 int dmuci_delete_by_section_unnamed_bbfdm(struct uci_section *s, const char *option, const char *value);
@@ -331,13 +332,15 @@ int dmuci_commit_bbfdm(void);
 struct uci_section *dmuci_get_section_bbfdm(const char *package, const char *section);
 struct uci_section *dmuci_walk_section_bbfdm(const char *package, const char *stype, const void *arg1, const void *arg2, int cmp , int (*filter)(struct uci_section *s, const void *value), struct uci_section *prev_section, int walk);
 
-struct uci_section *dmuci_walk_section_varstate(const char *package, const char *stype, const void *arg1, const void *arg2, int cmp , int (*filter)(struct uci_section *s, const void *value), struct uci_section *prev_section, int walk);
+int dmuci_add_list_value_varstate(const char *package, const char *section, const char *option, const char *value);
 int dmuci_add_section_varstate(const char *package, const char *stype, struct uci_section **s);
 int dmuci_delete_by_section_varstate(struct uci_section *s, const char *option, const char *value);
 int dmuci_get_option_value_string_varstate(const char *package, const char *section, const char *option, char **value);
 int dmuci_set_value_varstate(const char *package, const char *section, const char *option, const char *value);
 int dmuci_set_value_by_section_varstate(struct uci_section *s, const char *option, const char *value);
 int dmuci_commit_package_varstate(char *package);
+struct uci_section *dmuci_get_section_varstate(const char *package, const char *section);
+struct uci_section *dmuci_walk_section_varstate(const char *package, const char *stype, const void *arg1, const void *arg2, int cmp , int (*filter)(struct uci_section *s, const void *value), struct uci_section *prev_section, int walk);
 
 int db_get_value_string(const char *package, const char *section, const char *option, char **value);
 

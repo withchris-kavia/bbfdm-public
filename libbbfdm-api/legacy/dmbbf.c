@@ -915,7 +915,7 @@ static bool is_same_reference_path(const char *curr_value, const char *in_value)
 
 			calculate_hash(pch, hash_str, sizeof(hash_str));
 
-			dmuci_get_option_value_string_bbfdm("reference_translation", "reference_path", hash_str, &uci_val);
+			dmuci_get_option_value_string_varstate("bbfdm_reference_db", "reference_path", hash_str, &uci_val);
 
 			if (DM_STRLEN(uci_val)) {
 				pos += snprintf(&resolved_path[pos], sizeof(resolved_path) - pos, "%s,", uci_val);
@@ -936,42 +936,6 @@ static bool is_same_reference_path(const char *curr_value, const char *in_value)
 		return true;
 
 	return false;
-}
-
-static int convert_path_with_star(const char *full_obj, char *out_str, size_t out_len)
-{
-	char str[1024] = {0};
-	char *pch, *pchr;
-	size_t pos = 0;
-
-	DM_STRNCPY(str, full_obj, sizeof(str));
-
-	for (pch = strtok_r(str, ".", &pchr); pch != NULL; pch = strtok_r(NULL, ".", &pchr)) {
-		const char *part = isdigit_str(pch) ? "*" : pch;
-		int written = snprintf(out_str + pos, out_len - pos, "%s.", part);
-		if (written < 0 || written >= (int)(out_len - pos)) {
-			return -1; // overflow
-		}
-		pos += written;
-	}
-
-	return 0;
-}
-
-static void set_references(const char *parent_path, const char *current_path, const char *key_name, const char *key_value, char *out_str, size_t out_len)
-{
-	char linker[MAX_DM_PATH * 2] = {0};
-	char hash_str[9] = {0};
-
-	convert_path_with_star(parent_path, out_str, out_len);
-
-	snprintf(linker, sizeof(linker), "%s[%s==%s].", out_str, key_name, DM_STRLEN(key_value) ? key_value : "");
-	calculate_hash(linker, hash_str, sizeof(hash_str));
-	DM_STRNCPY(out_str, current_path, strlen(current_path));
-	dmuci_set_value_bbfdm("reference_translation", "reference_path", hash_str, out_str);
-
-	calculate_hash(out_str, hash_str, sizeof(hash_str));
-	dmuci_set_value_bbfdm("reference_translation", "reference_value", hash_str, DM_STRLEN(key_value) ? key_value : "#");
 }
 
 /* **********
@@ -1000,12 +964,6 @@ static int get_value_param(DMPARAM_ARGS)
 	}
 
 	fill_blob_param(&dmctx->bb, full_param, value, DMT_TYPE[leaf->type], leaf->dm_flags);
-
-	if (leaf->dm_flags & DM_FLAG_LINKER) {
-		// Update reference path  & value
-		set_references(node->parent->current_object, node->current_object, leaf->parameter, value, full_param, sizeof(full_param));
-	}
-
 	return 0;
 }
 
@@ -1039,11 +997,6 @@ static int mparam_get_value_in_param(DMPARAM_ARGS)
 	}
 
 	fill_blob_param(&dmctx->bb, full_param, value, DMT_TYPE[leaf->type], leaf->dm_flags);
-
-	if (leaf->dm_flags & DM_FLAG_LINKER) {
-		// Update reference path  & value
-		set_references(node->parent->current_object, node->current_object, leaf->parameter, value, full_param, sizeof(full_param));
-	}
 
 	dmctx->findparam = (dmctx->iswildcard) ? 1 : 0;
 	dmctx->stop = (dmctx->iswildcard) ? false : true;
@@ -1946,22 +1899,100 @@ int dm_entry_event(struct dmctx *dmctx)
 /* **********
  * get instances data base
  * **********/
-static int mobj_get_references_db(DMOBJECT_ARGS)
+static void create_required_sections(struct dmctx *ctx)
 {
 	struct uci_section *ref_s = NULL;
 
-	ref_s = dmuci_get_section_bbfdm("reference_translation", "reference_path");
+	ref_s = dmuci_get_section_varstate("bbfdm_reference_db", "reference_path");
 	if (ref_s == NULL) {
-		dmuci_add_section_bbfdm("reference_translation", "reference_path", &ref_s);
+		dmuci_add_section_varstate("bbfdm_reference_db", "reference_path", &ref_s);
 		dmuci_rename_section_by_section(ref_s, "reference_path");
 	}
 
-	ref_s = dmuci_get_section_bbfdm("reference_translation", "reference_value");
+	ref_s = dmuci_get_section_varstate("bbfdm_reference_db", "reference_value");
 	if (ref_s == NULL) {
-		dmuci_add_section_bbfdm("reference_translation", "reference_value", &ref_s);
+		dmuci_add_section_varstate("bbfdm_reference_db", "reference_value", &ref_s);
 		dmuci_rename_section_by_section(ref_s, "reference_value");
 	}
 
+	ref_s = dmuci_get_section_varstate("bbfdm_reference_db", ctx->in_value);
+	if (ref_s == NULL) {
+		dmuci_add_section_varstate("bbfdm_reference_db", "service", &ref_s);
+		dmuci_rename_section_by_section(ref_s, ctx->in_value);
+	} else {
+		struct uci_list *uci_list = NULL;
+		struct uci_element *e = NULL, *tmp = NULL;
+
+		dmuci_get_value_by_section_list(ref_s, "reference_path", &uci_list);
+		if (uci_list != NULL) {
+
+			uci_foreach_element_safe(uci_list, tmp, e) {
+				dmuci_set_value_varstate("bbfdm_reference_db", "reference_path", e->name, "");
+				dmuci_del_list_value_by_section(ref_s, "reference_path", e->name);
+			}
+		}
+
+		dmuci_get_value_by_section_list(ref_s, "reference_value", &uci_list);
+		if (uci_list != NULL) {
+
+			uci_foreach_element_safe(uci_list, tmp, e) {
+				dmuci_set_value_varstate("bbfdm_reference_db", "reference_value", e->name, "");
+				dmuci_del_list_value_by_section(ref_s, "reference_value", e->name);
+			}
+		}
+	}
+
+	// This argument is used as internal variable to pass service uci section
+	ctx->addobj_instance = (void *)ref_s;
+}
+
+static int convert_path_with_star(const char *full_obj, char *out_str, size_t out_len)
+{
+	char str[1024] = {0};
+	char *pch, *pchr;
+	size_t pos = 0;
+
+	DM_STRNCPY(str, full_obj, sizeof(str));
+
+	for (pch = strtok_r(str, ".", &pchr); pch != NULL; pch = strtok_r(NULL, ".", &pchr)) {
+		const char *part = isdigit_str(pch) ? "*" : pch;
+		int written = snprintf(out_str + pos, out_len - pos, "%s.", part);
+		if (written < 0 || written >= (int)(out_len - pos)) {
+			return -1; // overflow
+		}
+		pos += written;
+	}
+
+	return 0;
+}
+
+static void set_references(struct uci_section *service_sec, const char *parent_path, const char *current_path, const char *key_name, const char *key_value, char *out_str, size_t out_len)
+{
+	struct uci_list *uci_list = NULL;
+	char linker[MAX_DM_PATH * 2] = {0};
+	char hash_str[9] = {0};
+
+	convert_path_with_star(parent_path, out_str, out_len);
+
+	snprintf(linker, sizeof(linker), "%s[%s==%s].", out_str, key_name, DM_STRLEN(key_value) ? key_value : "");
+	calculate_hash(linker, hash_str, sizeof(hash_str));
+	DM_STRNCPY(out_str, current_path, strlen(current_path));
+	dmuci_set_value_varstate("bbfdm_reference_db", "reference_path", hash_str, out_str);
+
+	dmuci_get_value_by_section_list(service_sec, "reference_path", &uci_list);
+	if (!value_exists_in_uci_list(uci_list, hash_str))
+		dmuci_add_list_value_varstate("bbfdm_reference_db", section_name(service_sec), "reference_path", hash_str);
+
+	calculate_hash(out_str, hash_str, sizeof(hash_str));
+	dmuci_set_value_varstate("bbfdm_reference_db", "reference_value", hash_str, DM_STRLEN(key_value) ? key_value : "#");
+
+	dmuci_get_value_by_section_list(service_sec, "reference_value", &uci_list);
+	if (!value_exists_in_uci_list(uci_list, hash_str))
+		dmuci_add_list_value_varstate("bbfdm_reference_db", section_name(service_sec), "reference_value", hash_str);
+}
+
+static int mobj_get_references_db(DMOBJECT_ARGS)
+{
 	return 0;
 }
 
@@ -1978,7 +2009,7 @@ static int mparam_get_references_db(DMPARAM_ARGS)
 
 		(leaf->getvalue)(full_param, dmctx, data, instance, &value);
 
-		set_references(node->parent->current_object, node->current_object, leaf->parameter, value, full_param, sizeof(full_param));
+		set_references((void *)dmctx->addobj_instance, node->parent->current_object, node->current_object, leaf->parameter, value, full_param, sizeof(full_param));
 	}
 
 	return 0;
@@ -1989,6 +2020,8 @@ int dm_entry_references_db(struct dmctx *ctx)
 	DMOBJ *root = ctx->dm_entryobj;
 	DMNODE node = {.current_object = ""};
 	int err = 0;
+
+	create_required_sections(ctx);
 
 	ctx->inparam_isparam = 0;
 	ctx->findparam = 1;

@@ -185,7 +185,7 @@ static void resolve_reference_path(struct async_request_context *ctx, struct blo
 
 			calculate_hash(token, hash_str, sizeof(hash_str));
 
-			_uci_get_option_str(ctx->uci_ctx, "reference_translation", "reference_path", hash_str, reference_path, sizeof(reference_path));
+			_uci_get_option_str(ctx->uci_ctx, "bbfdm_reference_db", "reference_path", hash_str, reference_path, sizeof(reference_path));
 
 			// Add path to list in order to be used by other parameters
 			add_linker_entry(ctx, token, reference_path);
@@ -200,8 +200,6 @@ static void resolve_reference_path(struct async_request_context *ctx, struct blo
 
 	if (pos > 0) {
 		output[pos - 1] = 0; // Remove trailing comma
-	} else {
-		BBFDM_INFO("Can't resolve reference path '%s' -> Set its value to empty", ref_path);
 	}
 }
 
@@ -278,7 +276,7 @@ void send_response(struct async_request_context *ctx)
 
 		// Init uci context for only Get method
 		ctx->uci_ctx = uci_alloc_context();
-		if (ctx->uci_ctx) uci_set_confdir(ctx->uci_ctx, "/etc/bbfdm/dmmap/");
+		if (ctx->uci_ctx) uci_set_confdir(ctx->uci_ctx, "/var/state/");
 	}
 
 	prepare_and_send_response(ctx);

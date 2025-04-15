@@ -363,6 +363,7 @@
         "src/dataelements.c"
       ],
       "extra_dependencies": [
+        "-DSERVICE_NAME=\\\"wifidmd\\\"",
         "-DWIFIDMD_ENABLE_WIFI_DATAELEMENTS",
         "-lm"
       ]

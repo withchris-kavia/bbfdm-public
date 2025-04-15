@@ -302,7 +302,7 @@ int bbfdm_get_reference_linker(struct dmctx *ctx, char *reference_path, struct d
 
 	calculate_hash(reference_path, hash_str, sizeof(hash_str));
 
-	int res = dmuci_get_option_value_string_bbfdm("reference_translation", "reference_value", hash_str, &uci_val);
+	int res = dmuci_get_option_value_string_varstate("bbfdm_reference_db", "reference_value", hash_str, &uci_val);
 
 	if (uci_val && uci_val[0] == '#' && uci_val[1] == '\0') {
 		reference_args->value = uci_val;
