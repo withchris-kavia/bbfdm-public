@@ -57,7 +57,7 @@ static void _exec_factoryreset(const void *arg1, void *arg2)
 **************************************************************/
 static int get_Device_RootDataModelVersion(char *refparam, struct dmctx *ctx, void *data, char *instance, char **value)
 {
-	*value = dmstrdup("2.18");
+	*value = dmstrdup("2.19");
 	return 0;
 }
 
