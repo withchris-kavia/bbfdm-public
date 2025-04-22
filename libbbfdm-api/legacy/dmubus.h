@@ -53,6 +53,7 @@ void dmubus_wait_for_event(const char *event, int timeout, void *ev_data, CB_FUN
 			struct dmubus_ev_subtask *subtask);
 
 int dmubus_call(const char *obj, const char *method, struct ubus_arg u_args[], int u_args_size, json_object **req_res);
+int dmubus_call_timeout(const char *obj, const char *method, struct ubus_arg u_args[], int u_args_size, int timeout, json_object **req_res);
 int dmubus_call_blocking(const char *obj, const char *method, struct ubus_arg u_args[], int u_args_size, json_object **req_res);
 int dmubus_call_set(const char *obj, const char *method, struct ubus_arg u_args[], int u_args_size);
 

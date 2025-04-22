@@ -525,6 +525,22 @@ int dmubus_call_blocking(const char *obj, const char *method, struct ubus_arg u_
 	return rc;
 }
 
+int dmubus_call_timeout(const char *obj, const char *method, struct ubus_arg u_args[], int u_args_size, int timeout, json_object **req_res)
+{
+	struct blob_buf bmsg;
+	int rc;
+
+	memset(&bmsg, 0, sizeof(struct blob_buf));
+	prepare_blob_message(&bmsg, u_args, u_args_size);
+
+	rc = __dm_ubus_call_internal(obj, method, timeout, bmsg.head);
+
+	blob_buf_free(&bmsg);
+	*req_res = json_res;
+
+	return rc;
+}
+
 static void receive_list_result(struct ubus_context *ctx, struct ubus_object_data *obj, void *priv)
 {
 	struct blob_attr *cur = NULL;
