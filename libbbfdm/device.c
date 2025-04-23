@@ -30,10 +30,10 @@ static void _exec_reboot(const void *arg1, void *arg2)
 
 	sleep(3);
 	dmubus_call_set("rpc-sys", "reboot", UBUS_ARGS{0}, 0);
-	sleep(5); // Wait for reboot to happen
+	sleep(30); // Wait for reboot to happen
 	BBF_ERR("Reboot call failed with rpc-sys, trying again with system");
 	dmubus_call_set("system", "reboot", UBUS_ARGS{0}, 0);
-	sleep(5); // Wait for reboot
+	sleep(30); // Wait for reboot
 	BBF_ERR("Reboot call failed!!!");
 
 	// Set last_reboot_cause to empty because there is a problem in the system reboot
