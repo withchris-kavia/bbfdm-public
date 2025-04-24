@@ -416,7 +416,10 @@ def download_and_build_plugins(plugins, vendor_prefix):
                     if filename.endswith('.c'):
                         LIST_FILES.append(filename)
                     elif filename.endswith('.json'):
-                        install_json_plugin(filename, "/usr/share/bbfdm/micro_services/core/"+f"{plugin_index}_{name}.json", prefix)
+                        if is_microservice is True:
+                            install_json_plugin(filename, "/usr/share/bbfdm/micro_services/"+f"{plugin_index}_{name}.json", prefix)
+                        else:
+                            install_json_plugin(filename, "/usr/share/bbfdm/micro_services/core/"+f"{plugin_index}_{name}.json", prefix)
                     else:
                         BBF_ERROR_CODE += 1
                         print(f"# Unknown file format {filename} {BBF_ERROR_CODE}")

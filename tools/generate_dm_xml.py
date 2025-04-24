@@ -114,8 +114,8 @@ def get_info_from_json(data, dm_json_files=None):
                     if i != (len(list_data) - 1) and list_data[i + 1] == list_data[i] + "{i}.":
                         continue
                     try:
-                        if str(list_data[i]).find("X_IOWRT_EU_") != -1:
-                            param = str(list_data[i]).replace("X_IOWRT_EU_", "{BBF_VENDOR_PREFIX}")
+                        if str(list_data[i]).find("X_IOWRT_EU_") != -1 or str(list_data[i]).find("X_GENEXIS_EU_") != -1:
+                            param = str(list_data[i]).replace("X_IOWRT_EU_", "{BBF_VENDOR_PREFIX}").replace("X_GENEXIS_EU_", "{BBF_VENDOR_PREFIX}")
                         else:
                             param = str(list_data[i])
 
@@ -173,6 +173,8 @@ def generate_bbf_xml_file(output_file, dm_json_files=None):
 
             ob_description = ET.SubElement(objec, "description")
             ob_description.text = desc.replace("<", "{").replace(">", "}") if desc is not None else ""
+            if desc is None:
+                print(f'#### Description should be added for {name} object ####')
 
             DM_OBJ_COUNT += 1
         else:
@@ -185,7 +187,9 @@ def generate_bbf_xml_file(output_file, dm_json_files=None):
 
             p_description = ET.SubElement(parameter, "description")
             p_description.text = desc.replace("<", "{").replace(">", "}") if desc is not None else ""
-            
+            if desc is None:
+                print(f'#### Description should be added for {name} parameter ####')
+
             syntax = ET.SubElement(parameter, "syntax")
 
             if list_ob is not None and len(list_ob) != 0:

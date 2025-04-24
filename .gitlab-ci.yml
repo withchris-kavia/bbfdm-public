@@ -47,7 +47,7 @@ run_tools_test:
       password $CI_JOB_TOKEN
       " > ~/.netrc
   - "./gitlab-ci/pipeline_setup.sh"
-  - "./gitlab-ci/setup.sh ms"
+  - "./gitlab-ci/setup.sh"
   - "./gitlab-ci/tools-test.sh"
   - "./gitlab-ci/generate_supported_dm.sh"
 

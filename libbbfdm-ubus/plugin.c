@@ -129,7 +129,12 @@ int bbfdm_free_dotso_plugin(struct bbfdm_context *bbfdm_ctx, void **lib_handle)
 	return 0;
 }
 
-static int bbfdm_load_json_plugin(struct bbfdm_context *bbfdm_ctx, struct list_head *json_plugin, struct list_head *json_list,
+static int browse_obj(struct dmctx *dmctx, DMNODE *parent_node, void *prev_data, char *prev_instance)
+{
+	return 0;
+}
+
+int bbfdm_load_json_plugin(struct bbfdm_context *bbfdm_ctx, struct list_head *json_plugin, struct list_head *json_list,
 		struct list_head *json_memhead, const char *file_path, DMOBJ **main_entry)
 {
 	DMOBJ *dm_entryobj = NULL;
@@ -187,6 +192,16 @@ static int bbfdm_load_json_plugin(struct bbfdm_context *bbfdm_ctx, struct list_h
 			return -1;
 		}
 
+		// Parent Path is multi-instance object
+		bool multi_instances = false;
+		if (node_obj[obj_prefix_len - 1] == '.' &&
+				node_obj[obj_prefix_len] == '{' &&
+				node_obj[obj_prefix_len + 1] == 'i' &&
+				node_obj[obj_prefix_len + 2] == '}' &&
+				node_obj[obj_prefix_len + 3] == '.') {
+			multi_instances = true;
+		}
+			
 		// Remove '.' from object prefix
 		if (obj_prefix[obj_prefix_len - 1] == '.')
 			obj_prefix[obj_prefix_len - 1] = 0;
@@ -206,6 +221,7 @@ static int bbfdm_load_json_plugin(struct bbfdm_context *bbfdm_ctx, struct list_h
 		dm_entryobj[idx].permission = &DMREAD;
 		dm_entryobj[idx].nextobj = (DMOBJ *)dm_dynamic_calloc(json_memhead, 2, sizeof(DMOBJ));
 		dm_entryobj[idx].leaf = NULL;
+		dm_entryobj[idx].browseinstobj = multi_instances ? browse_obj : NULL;
 		dm_entryobj[idx].bbfdm_type = BBFDM_BOTH;
 
 		parse_obj(node_obj, jobj, dm_entryobj[idx].nextobj, 0, json_plugin_version, json_list);

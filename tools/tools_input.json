@@ -63,6 +63,7 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/xmppc.git",
       "proto": "git",
+      "is_microservice": true,
       "dm_files": [
         "src/datamodel.c"
       ]
@@ -71,6 +72,7 @@
       "repo": "https://dev.iopsys.eu/bbf/stunc.git",
       "proto": "git",
       "version": "devel",
+      "is_microservice": true,
       "dm_files": [
         "src/datamodel.c"
       ]
@@ -145,6 +147,7 @@
         "-lcrypt"
       ],
       "dm_files": [
+        "src/main.c",
         "src/users.c"
       ]
     },
@@ -152,7 +155,11 @@
       "repo": "https://dev.iopsys.eu/network/parental-control.git",
       "proto": "git",
       "version": "devel",
+      "dm_info_file": "src/datamodel_description.json",
       "dm_files": [
+        "src/config.c",
+        "src/utils.c",
+        "src/dns_cache.c",
         "src/parentalcontrol.c"
       ]
     },
@@ -168,6 +175,8 @@
       "repo": "https://dev.iopsys.eu/iopsys/hostmngr.git",
       "proto": "git",
       "version": "devel",
+      "dm_info_file": "src/bbf_plugin/datamodel_description.json",
+      "is_microservice": true,
       "extra_dependencies": [
         "-DHAS_VENDOR_EXT",
         "-DCUSTOM_PREFIX=\\\"X_IOWRT_EU_\\\""
@@ -244,7 +253,9 @@
       "repo": "https://dev.iopsys.eu/hal/qosmngr.git",
       "proto": "git",
       "version": "devel",
+      "dm_info_file": "src/datamodel_description.json",
       "dm_files": [
+        "src/main.c",
         "src/qos_bbf.c"
       ]
     },
@@ -281,8 +292,8 @@
         "dm_info_file": "src/datamodel_description.json",
         "extra_dependencies": [
           "-DETHMNGR_MACVLAN_EXTENSION",
-	  "-leasy",
-	  "-lethernet"
+          "-leasy",
+          "-lethernet"
         ],
         "dm_files": [
           "src/ethmngr.c",
@@ -314,6 +325,7 @@
       "repo": "https://dev.iopsys.eu/network/bridgemngr.git",
       "proto": "git",
       "version": "devel",
+      "is_microservice": true,
       "dm_files": [
         "src/driver_vlan_backend/vendor.c",
         "src/driver_vlan_backend/common.c"
@@ -359,11 +371,25 @@
       "version": "devel",
       "dm_files": [
         "src/wifidmd.c",
-        "src/wifi.c",
+        "src/wifi.c"
+      ],
+      "extra_dependencies": [
+        "-DSERVICE_NAME=\\\"wifidmd\\\"",
+        "-lm"
+      ]
+    },
+    {
+      "repo": "https://dev.iopsys.eu/bbf/wifidmd.git",
+      "proto": "git",
+      "version": "devel",
+      "is_microservice": true,
+      "dm_files": [
+        "src/wifidmd.c",
         "src/dataelements.c"
       ],
       "extra_dependencies": [
         "-DSERVICE_NAME=\\\"wifidmd\\\"",
+        "-DWIFIDMD_DISABLE_LEGACY_WIFI",
         "-DWIFIDMD_ENABLE_WIFI_DATAELEMENTS",
         "-lm"
       ]
@@ -434,6 +460,7 @@
       "repo": "https://dev.iopsys.eu/voice/tr104.git",
       "proto": "git",
       "version": "devel",
+      "is_microservice": true,
       "dm_info_file": "libdm/extensions/iowrt/datamodel_description.json",
       "dm_files": [
         "libdm/tr104/*.c"
@@ -447,6 +474,7 @@
       "repo": "https://dev.iopsys.eu/voice/tr104.git",
       "proto": "git",
       "version": "devel",
+      "is_microservice": true,
       "dm_files": [
         "libdm/extensions/iowrt/*.c"
       ],
@@ -459,6 +487,7 @@
       "repo": "https://dev.iopsys.eu/system/logmngr.git",
       "proto": "git",
       "version": "devel",
+      "is_microservice": true,
       "dm_files": [
         "bbf_plugin/deviceinfologrotate.c",
         "bbf_plugin/common.c"
@@ -468,6 +497,7 @@
       "repo": "https://dev.iopsys.eu/system/logmngr.git",
       "proto": "git",
       "version": "devel",
+      "is_microservice": true,
       "dm_files": [
         "bbf_plugin/deviceinfovendorlog.c",
         "bbf_plugin/common.c"
@@ -486,6 +516,8 @@
       "repo": "https://dev.iopsys.eu/feed/gnx.git",
       "proto": "git",
       "version": "devel",
+      "is_microservice": true,
+      "dm_info_file": "package/gnx-files-ftth/bbf_plugin/datamodel_description.json",
       "vendor_prefix": "X_GENEXIS_EU_",
       "dm_files": [
         "package/gnx-files-ftth/bbf_plugin/link_forwarding.json"
@@ -504,6 +536,7 @@
       "repo": "https://dev.iopsys.eu/feed/gnx.git",
       "proto": "git",
       "version": "devel",
+      "dm_info_file": "genexis-packages/gnx-catv/datamodel/datamodel_description.json",
       "vendor_prefix": "X_GENEXIS_EU_",
       "dm_files": [
         "genexis-packages/gnx-catv/datamodel/datamodel.c"
@@ -513,6 +546,7 @@
       "repo": "https://dev.iopsys.eu/feed/gnx.git",
       "proto": "git",
       "version": "devel",
+      "is_microservice": true,
       "vendor_prefix": "X_GENEXIS_EU_",
       "dm_files": [
         "genexis-packages/easywifi/files/wifi_extn.json"
@@ -522,6 +556,7 @@
       "repo": "https://dev.iopsys.eu/feed/gnx.git",
       "proto": "git",
       "version": "devel",
+      "dm_info_file": "genexis-packages/dhcp-on-boarding/src/datamodel_description.json",
       "vendor_prefix": "X_GENEXIS_EU_",
       "dm_files": [
         "genexis-packages/dhcp-on-boarding/src/datamodel.c"
@@ -531,6 +566,7 @@
       "repo": "https://dev.iopsys.eu/feed/gnx.git",
       "proto": "git",
       "version": "devel",
+      "dm_info_file": "genexis-packages/gnx-loop-detector/datamodel/datamodel_description.json",
       "vendor_prefix": "X_GENEXIS_EU_",
       "dm_files": [
         "genexis-packages/gnx-loop-detector/datamodel/datamodel.c"
@@ -540,6 +576,7 @@
       "repo": "https://dev.iopsys.eu/feed/gnx.git",
       "proto": "git",
       "version": "devel",
+      "dm_info_file": "genexis-packages/gnx-sfp/src/bbf_plugin/datamodel_description.json",
       "vendor_prefix": "X_GENEXIS_EU_",
       "dm_files": [
         "genexis-packages/gnx-sfp/src/bbf_plugin/datamodel.c"

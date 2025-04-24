@@ -16,6 +16,8 @@ int bbfdm_load_external_plugin(struct bbfdm_context *bbfdm_ctx, void **lib_handl
 int bbfdm_load_dotso_plugin(struct bbfdm_context *bbfdm_ctx, void **lib_handle, const char *file_path, DMOBJ **main_entry);
 int bbfdm_free_dotso_plugin(struct bbfdm_context *bbfdm_ctx, void *lib_handle);
 
+int bbfdm_load_json_plugin(struct bbfdm_context *bbfdm_ctx, struct list_head *json_plugin, struct list_head *json_list,
+		struct list_head *json_memhead, const char *file_path, DMOBJ **main_entry);
 int bbfdm_free_json_plugin(void);
 
 #endif /* PLUGIN_H */

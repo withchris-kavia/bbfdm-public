@@ -10,6 +10,10 @@
 #include "../../libbbfdm-ubus/plugin.h"
 #include "../../libbbfdm/device.h"
 
+extern struct list_head loaded_json_files;
+extern struct list_head json_list;
+extern struct list_head json_memhead;
+
 static int cli_exec_schema(struct dmctx *bbfdm_ctx, char *in_path)
 {
 	int err = 0;
@@ -84,7 +88,10 @@ int main(int argc, char **argv)
 	if (plugin_path == NULL) {
 		err = bbfdm_load_internal_plugin(NULL, tDynamicObj, &CLI_DM_ROOT_OBJ);
 	} else {
-		err = bbfdm_load_dotso_plugin(NULL, &cli_lib_handle, plugin_path, &CLI_DM_ROOT_OBJ);
+		if (strstr(plugin_path, ".json") != NULL)
+			err = bbfdm_load_json_plugin(NULL, &loaded_json_files, &json_list, &json_memhead, plugin_path, &CLI_DM_ROOT_OBJ);
+		else
+			err = bbfdm_load_dotso_plugin(NULL, &cli_lib_handle, plugin_path, &CLI_DM_ROOT_OBJ);
 	}
 
 	if (err || !CLI_DM_ROOT_OBJ) {
@@ -111,6 +118,9 @@ int main(int argc, char **argv)
 
 	// Free plugin handle
 	bbfdm_free_dotso_plugin(NULL, &cli_lib_handle);
+
+	// Free JSON plugin handle
+	bbfdm_free_json_plugin();
 
 	return err;
 }
