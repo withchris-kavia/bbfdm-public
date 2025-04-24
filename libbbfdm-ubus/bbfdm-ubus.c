@@ -12,6 +12,9 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <sys/file.h>
 #include <libubox/blobmsg.h>
 #include <libubox/uloop.h>
 #include <libubus.h>
@@ -779,6 +782,33 @@ void bbfdm_ubus_load_data_model(DM_MAP_OBJ *DynamicObj)
 	INTERNAL_ROOT_TREE = DynamicObj;
 }
 
+static int bbfdm_lock_reference_db(void)
+{
+#define BBF_LOCK_FILE "/var/lock/bbfdm_reference_db.lock"
+
+	int fd = open(BBF_LOCK_FILE, O_CREAT | O_RDWR, 0666);
+	if (fd == -1) {
+		BBF_ERR("Error opening lock file %s: %s", BBF_LOCK_FILE, strerror(errno));
+		return -1;
+	}
+
+	if (flock(fd, LOCK_EX) == -1) {
+		BBF_ERR("Error locking file %s: %s", BBF_LOCK_FILE, strerror(errno));
+		close(fd);
+		return -1;
+	}
+
+	return fd; // Lock held
+}
+
+static void bbfdm_unlock_reference_db(int lock_fd)
+{
+	if (lock_fd >= 0) {
+		flock(lock_fd, LOCK_UN);
+		close(lock_fd);
+	}
+}
+
 int bbfdm_refresh_references(unsigned int dm_type, const char *srv_obj_name)
 {
 	char hash_str[9] = {0};
@@ -790,6 +820,10 @@ int bbfdm_refresh_references(unsigned int dm_type, const char *srv_obj_name)
 		.in_value = hash_str,
 		.dm_type = dm_type
 	};
+
+	int lock_fd = bbfdm_lock_reference_db();
+	if (lock_fd == -1)
+		return -1;
 
 	bbf_init(&bbf_ctx);
 	int res = bbfdm_cmd_exec(&bbf_ctx, BBF_REFERENCES_DB);
@@ -804,6 +838,7 @@ int bbfdm_refresh_references(unsigned int dm_type, const char *srv_obj_name)
 	}
 
 	bbf_cleanup(&bbf_ctx);
+	bbfdm_unlock_reference_db(lock_fd);
 
 	return res;
 }

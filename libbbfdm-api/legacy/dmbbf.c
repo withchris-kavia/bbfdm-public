@@ -1921,24 +1921,26 @@ static void create_required_sections(struct dmctx *ctx)
 		dmuci_rename_section_by_section(ref_s, ctx->in_value);
 	} else {
 		struct uci_list *uci_list = NULL;
-		struct uci_element *e = NULL, *tmp = NULL;
+		struct uci_element *e = NULL;
 
 		dmuci_get_value_by_section_list(ref_s, "reference_path", &uci_list);
 		if (uci_list != NULL) {
 
-			uci_foreach_element_safe(uci_list, tmp, e) {
+			uci_foreach_element(uci_list, e) {
 				dmuci_set_value_varstate("bbfdm_reference_db", "reference_path", e->name, "");
-				dmuci_del_list_value_by_section(ref_s, "reference_path", e->name);
 			}
+
+			dmuci_set_value_by_section_varstate(ref_s, "reference_path", "");
 		}
 
 		dmuci_get_value_by_section_list(ref_s, "reference_value", &uci_list);
 		if (uci_list != NULL) {
 
-			uci_foreach_element_safe(uci_list, tmp, e) {
+			uci_foreach_element(uci_list, e) {
 				dmuci_set_value_varstate("bbfdm_reference_db", "reference_value", e->name, "");
-				dmuci_del_list_value_by_section(ref_s, "reference_value", e->name);
 			}
+
+			dmuci_set_value_by_section_varstate(ref_s, "reference_value", "");
 		}
 	}
 
