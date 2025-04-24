@@ -113,9 +113,9 @@ function install_libeasy()
 
 		cd /opt/dev/libeasy
 		exec_cmd make
-		mkdir -p /usr/include/easy
-		cp -a libeasy*.so* /usr/lib
-		cp -a *.h /usr/include/easy/
+		sudo mkdir -p /usr/include/easy
+		sudo cp -a libeasy*.so* /usr/lib
+		sudo cp -a *.h /usr/include/easy/
 	)
 }
 
@@ -128,9 +128,9 @@ function install_libqos()
 
 		cd /opt/dev/libqos
 		exec_cmd make
-		mkdir -p /usr/include/
-		cp -a libqos*.so* /usr/lib/
-		cp -a include/*.h /usr/include/
+		sudo mkdir -p /usr/include/
+		sudo cp -a libqos*.so* /usr/lib/
+		sudo cp -a include/*.h /usr/include/
 	)
 }
 
@@ -142,8 +142,8 @@ function install_libethernet()
 	(
 		 cd /opt/dev/libethernet
 		 make PLATFORM=TEST
-		 cp ethernet.h /usr/include
-		 cp -a libethernet*.so* /usr/lib
+		 sudo cp ethernet.h /usr/include
+		 sudo cp -a libethernet*.so* /usr/lib
 		 sudo ldconfig
 	)
 }
@@ -158,7 +158,7 @@ function install_ethmngr_as_micro_service()
 
 	exec_cmd git clone https://dev.iopsys.eu/hal/ethmngr.git /opt/dev/ethmngr
 	exec_cmd make -C /opt/dev/ethmngr
-	exec_cmd cp -f /opt/dev/ethmngr/ethmngr /usr/sbin/ethmngr
+	exec_cmd sudo cp -f /opt/dev/ethmngr/ethmngr /usr/sbin/ethmngr
 }
 
 function install_netmngr_as_micro_service()
@@ -219,7 +219,7 @@ function error_on_zero()
 {
 	ret=$1
 	if [ "$ret" -eq 0 ]; then
-		echo "Validation of last command failed, ret(${ret})"
+		echo "Validation of Last command failed, ret(${ret})"
 		cp /tmp/memory-*.xml .
 		exit $ret
 	fi

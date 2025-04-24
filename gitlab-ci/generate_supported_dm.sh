@@ -5,8 +5,8 @@ echo "Generate xml and xls artifacts"
 source ./gitlab-ci/shared.sh
 
 # install required packages
-exec_cmd apt update
-exec_cmd apt install -y python3-pip libxml2-utils
+exec_cmd sudo apt update
+exec_cmd sudo apt install -y python3-pip libxml2-utils
 exec_cmd pip3 install xlwt
 
 if [ -n "${CI_SERVER_HOST}" ]; then
@@ -20,10 +20,11 @@ install_libeasy
 install_libethernet
 install_libqos
 
-[ ! -d "${BBFDM_MS_DIR}" ] && mkdir -p "${BBFDM_MS_DIR}"
-rm -rf ${BBFDM_MS_DIR}/*
-
-mkdir -p ${BBFDM_MS_DIR}/core
+[ ! -d "${BBFDM_MS_DIR}" ] && {
+	mkdir -p "${BBFDM_MS_DIR}"
+	rm -rf ${BBFDM_MS_DIR}/*
+	mkdir -p ${BBFDM_MS_DIR}/core
+}
 
 if [ -z "${1}" ]; then
 	./tools/generate_dm.py tools/tools_input.json

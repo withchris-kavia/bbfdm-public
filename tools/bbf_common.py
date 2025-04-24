@@ -178,7 +178,7 @@ def generate_shared_library(dm_name, source_files, vendor_prefix,
         return True
     except subprocess.CalledProcessError as e:
         print(f"     Error during compilation: {e}")
-        return False
+        sys.exit(-1)
 
 
 def build_and_install_bbfdm(vendor_prefix):
@@ -204,7 +204,7 @@ def build_and_install_bbfdm(vendor_prefix):
         "-DCMAKE_INSTALL_PREFIX=/"
     ]
     make_command = ["make"]
-    make_install_command = ["make", "install"]
+    make_install_command = ["sudo", "make", "install"]
 
     try:
         subprocess.check_call(cmake_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -242,7 +242,7 @@ def build_and_install_dmcli():
 
     try:
         subprocess.check_call(gcc_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.check_call(["mv", "dm-cli", "/usr/sbin/dm-cli"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.check_call(["sudo", "mv", "dm-cli", "/usr/sbin/dm-cli"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError as e:
         print(f"Error running commands: {e}")
         sys.exit(1)
@@ -368,6 +368,11 @@ def download_and_build_plugins(plugins, vendor_prefix):
         repo_path = None
         name = os.path.basename(repo).replace('.git', '')
 
+        path = os.path.expanduser("~/.netrc")
+        if not os.path.isfile(path):
+            repo = repo.replace("https://dev.iopsys.eu/", "git@dev.iopsys.eu:")
+
+        print(f"## Repo is {repo}")
         if not prefix:
             prefix = vendor_prefix
 
