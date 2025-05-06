@@ -716,6 +716,65 @@ static int load_micro_service_data_model(struct bbfdm_context *daemon_ctx)
 	return 0;
 }
 
+int bbfdm_print_data_model_schema(struct bbfdm_context *bbfdm_ctx, const enum bbfdm_type_enum type)
+{
+	struct dmctx bbf_ctx = {
+		.in_param = ROOT_NODE,
+		.nextlevel = false,
+		.iscommand = true,
+		.isevent = true,
+		.isinfo = true,
+		.dm_type = type
+	};
+	int err = 0;
+
+	err = load_micro_service_config(&bbfdm_ctx->config);
+	if (err) {
+		fprintf(stderr, "Failed to load micro-service config\n");
+		return err;
+	}
+
+	err = load_micro_service_data_model(bbfdm_ctx);
+	if (err) {
+		fprintf(stderr, "Failed to load micro-service data model\n");
+		bbfdm_ctx_cleanup(bbfdm_ctx);
+		return err;
+	}
+
+	bbf_init(&bbf_ctx);
+
+	err = bbf_entry_method(&bbf_ctx, BBF_SCHEMA);
+	if (!err) {
+		struct blob_attr *cur = NULL;
+		size_t rem = 0;
+
+		blobmsg_for_each_attr(cur, bbf_ctx.bb.head, rem) {
+			struct blob_attr *tb[3] = {0};
+			const struct blobmsg_policy p[3] = {
+					{ "path", BLOBMSG_TYPE_STRING },
+					{ "data", BLOBMSG_TYPE_STRING },
+					{ "type", BLOBMSG_TYPE_STRING }
+			};
+
+			blobmsg_parse(p, 3, tb, blobmsg_data(cur), blobmsg_len(cur));
+
+			char *name = (tb[0]) ? blobmsg_get_string(tb[0]) : "";
+			char *data = (tb[1]) ? blobmsg_get_string(tb[1]) : "";
+			char *type = (tb[2]) ? blobmsg_get_string(tb[2]) : "";
+
+			printf("%s %s %s\n", name, type, strlen(data) ? data : "0");
+		}
+	} else {
+		printf("ERROR: %d retrieving %s\n", err, ROOT_NODE);
+		err = -1;
+	}
+
+	bbf_cleanup(&bbf_ctx);
+
+	bbfdm_ctx_cleanup(bbfdm_ctx);
+	return 0;
+}
+
 int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
 {
 	int err = 0;
