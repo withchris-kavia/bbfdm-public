@@ -19,8 +19,21 @@
       },
       {
         "parent_dm": "Device.",
-        "object": "GatewayInfo"
+        "object": "PacketCaptureDiagnostics"
       },
+      {
+        "parent_dm": "Device.",
+        "object": "SelfTestDiagnostics"
+      },
+      {
+        "parent_dm": "Device.",
+        "object": "Syslog"
+      },
+      {
+        "parent_dm": "Device.",
+        "object": "{BBF_VENDOR_PREFIX}OpenVPN",
+        "proto": "usp"
+      },	  
       {
         "parent_dm": "Device.",
         "object": "RootDataModelVersion"
@@ -28,11 +41,11 @@
       {
         "parent_dm": "Device.",
         "object": "Reboot()"
-        },
-        {
-          "parent_dm": "Device.",
-          "object": "FactoryReset()"
-        }
+      },
+      {
+        "parent_dm": "Device.",
+        "object": "FactoryReset()"
+      }
     ],
     "config": {
       "loglevel": "3"

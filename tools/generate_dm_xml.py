@@ -395,13 +395,6 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
-        '-p', '--vendor-prefix',
-		default = 'X_IOWRT_EU_',
-		metavar = 'X_IOWRT_EU_',
-		help = 'Generate data model tree using provided vendor prefix for vendor defined objects.'
-    )
-
-    parser.add_argument(
         '-d', '--device-protocol',
 		default = 'DEVICE_PROTOCOL_DSLFTR069v1',
 		metavar = 'DEVICE_PROTOCOL_DSLFTR069v1',
@@ -480,7 +473,7 @@ if __name__ == '__main__':
 
             plugins.append(r)
 
-    bbf.generate_supported_dm(args.vendor_prefix, plugins)
+    bbf.generate_supported_dm(plugins)
     generate_xml(args.format, args.dm_json_files, args.output)
     print(f'Datamodel generation completed, aritifacts available in {args.output}')
     sys.exit(bbf.BBF_ERROR_CODE)

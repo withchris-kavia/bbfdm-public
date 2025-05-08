@@ -259,10 +259,6 @@ static int bbfdm_schema_handler(struct ubus_context *ctx, struct ubus_object *ob
 	data.bbf_ctx.isinfo = (dm_type == BBFDM_CWMP) ? false : true;
 	data.plist = &paths_list;
 
-#ifdef BBF_SCHEMA_FULL_TREE
-	data.bbf_ctx.isinfo = true;
-	bbfdm_get(&data, BBF_SCHEMA);
-#else
 	if (dm_type == BBFDM_CWMP) {
 		char *service_name = strdup(u->config.service_name);
 		data.bbf_ctx.in_value = (dm_type == BBFDM_CWMP) ? service_name : NULL;
@@ -271,7 +267,6 @@ static int bbfdm_schema_handler(struct ubus_context *ctx, struct ubus_object *ob
 	} else {
 		bbfdm_get(&data, BBF_SCHEMA);
 	}
-#endif
 
 	free_path_list(&paths_list);
 	return 0;

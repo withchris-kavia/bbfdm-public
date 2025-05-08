@@ -15,15 +15,6 @@ if [ -n "${CI_SERVER_HOST}" ]; then
 	echo "password ${CI_JOB_TOKEN}" >>~/.netrc
 fi
 
-install_cmph
-install_libeasy
-install_libethernet
-install_libqos
-
-[ ! -d "${BBFDM_MS_DIR}" ] && mkdir -p "${BBFDM_MS_DIR}"
-rm -rf ${BBFDM_MS_DIR}/*
-mkdir -p ${BBFDM_MS_DIR}/core
-
 if [ -z "${1}" ]; then
 	./tools/generate_dm.py tools/tools_input.json
 else
@@ -44,14 +35,5 @@ echo "Check if the required tools are generated"
 echo "Validate datamodel_default generated XML file"
 xmllint --schema test/tools/cwmp-datamodel-*.xsd out/datamodel_default.xml --noout
 check_ret $?
-
-# Check if the specified log file exists, which indicates errors during plugin loading
-if [ -f ${BBFDM_LOG_FILE} ]; then
-	echo "Some plugins failed to load! Please check the errors below"
-	echo "*****************************************************"
-	cat "${BBFDM_LOG_FILE}"
-	echo "*****************************************************"
-	exit 1
-fi
 
 echo "Generation of xml and xls artifacts :: PASS"

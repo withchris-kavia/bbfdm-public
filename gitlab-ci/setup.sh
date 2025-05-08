@@ -26,7 +26,11 @@ cp ./gitlab-ci/core_service.conf /etc/supervisor/conf.d/
 cp ./gitlab-ci/reload_service.conf /etc/supervisor/conf.d/
 
 if [ -n "$1" ]; then
-	cp ./gitlab-ci/micro_service.conf /etc/supervisor/conf.d/
+	if [ "$1" == "bbfdm" ]; then
+		cp ./gitlab-ci/full_micro_service.conf /etc/supervisor/conf.d/
+	else
+		cp ./gitlab-ci/micro_service.conf /etc/supervisor/conf.d/
+	fi
 fi
 
 rm -f /etc/bbfdm/dmmap/*

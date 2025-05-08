@@ -32,7 +32,7 @@ for plugin in $(ls -1 test/vendor_test/*); do
 	check_ret $?
 done
 
-echo "Validate Data Model JSON Plugin after generating from TR-181, TR-104 and TR-135 XML Files"
+echo "Validate Data Model JSON Plugin after generating from TR-181 and TR-104 XML Files"
 json_path=$(./tools/convert_dm_xml_to_json.py -d test/tools/)
 ./tools/validate_json_plugin.py $json_path
 check_ret $?
