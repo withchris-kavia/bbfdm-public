@@ -887,7 +887,8 @@ int bbfdm_refresh_references(unsigned int dm_type, const char *srv_obj_name)
 
 		snprintf(config_name, sizeof(config_name), "%s", "bbfdm_reference_db");
 
-		// Apply all changes
+		// Apply 'dmmap' & '/var/state' changes
+		dmuci_commit_bbfdm();
 		dmuci_commit_package_varstate(config_name);
 	}
 
