@@ -25,6 +25,8 @@ typedef struct service_entry {
     bool is_unified;
     size_t object_count;
     service_object_t *objects;
+    int consecutive_timeouts; // Tracks successive timeouts
+    bool is_blacklisted; // Marks if the service is blacklisted
 } service_entry_t;
 
 int register_services(struct ubus_context *ctx);

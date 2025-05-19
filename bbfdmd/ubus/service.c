@@ -201,24 +201,35 @@ void list_registered_services(struct blob_buf *bb)
 
 	list_for_each_entry(service, &registered_services, list) {
 		void *table = blobmsg_open_table(bb, NULL);
+
 		blobmsg_add_string(bb, "name", service->name ? service->name : "");
-		blobmsg_add_string(bb, "proto", service->protocol == BBFDMD_USP ? "usp" : service->protocol == BBFDMD_CWMP ? "cwmp" : "both");
+		blobmsg_add_string(bb, "proto",
+			service->protocol == BBFDMD_USP ? "usp" :
+			service->protocol == BBFDMD_CWMP ? "cwmp" : "both");
+
 		blobmsg_add_u8(bb, "unified_daemon", service->is_unified);
+		blobmsg_add_u8(bb, "blacklisted", service->is_blacklisted);
+
 		void *objects_array = blobmsg_open_array(bb, "objects");
 		for (size_t i = 0; i < service->object_count; i++) {
 			void *obj_table = blobmsg_open_table(bb, NULL);
 			blobmsg_add_string(bb, "parent_dm", service->objects[i].parent_path);
 			blobmsg_add_string(bb, "object", service->objects[i].object_name);
+
 			if (service->protocol == BBFDMD_USP) {
 				blobmsg_add_string(bb, "proto", "usp");
 			} else if (service->protocol == BBFDMD_CWMP) {
 				blobmsg_add_string(bb, "proto", "cwmp");
 			} else {
-				blobmsg_add_string(bb, "proto", service->objects[i].protocol == BBFDMD_USP ? "usp" : service->objects[i].protocol == BBFDMD_CWMP ? "cwmp" : "both");
+				blobmsg_add_string(bb, "proto",
+					service->objects[i].protocol == BBFDMD_USP ? "usp" :
+					service->objects[i].protocol == BBFDMD_CWMP ? "cwmp" : "both");
 			}
+
 			blobmsg_close_table(bb, obj_table);
 		}
 		blobmsg_close_array(bb, objects_array);
+
 		blobmsg_close_table(bb, table);
 	}
 

@@ -41,12 +41,13 @@ struct async_request_context {
 
 struct ubus_request_tracker {
 	struct async_request_context *ctx;
+	service_entry_t *service;
 	struct ubus_request async_request;
 	struct uloop_timeout timeout;
 	char request_name[128];
 };
 
-void run_async_call(struct async_request_context *ctx, const char *ubus_obj, struct blob_attr *msg);
+void run_async_call(struct async_request_context *ctx, service_entry_t *service, struct blob_attr *msg);
 void send_response(struct async_request_context *ctx);
 
 #endif /* BBFDMD_GET_H */

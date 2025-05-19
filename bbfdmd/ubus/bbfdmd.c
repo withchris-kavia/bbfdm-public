@@ -27,6 +27,50 @@
 extern struct list_head registered_services;
 extern int g_log_level;
 
+static void bbfdm_ubus_add_event_cb(struct ubus_context *ctx __attribute__((unused)),
+		struct ubus_event_handler *ev __attribute__((unused)),
+		const char *type, struct blob_attr *msg)
+{
+	const struct blobmsg_policy policy = {
+		"path", BLOBMSG_TYPE_STRING
+	};
+	service_entry_t *service = NULL;
+	struct blob_attr *attr = NULL;
+	bool service_found = false;
+	const char *path;
+
+	if (type && strcmp(type, "ubus.object.add") != 0)
+		return;
+
+	blobmsg_parse(&policy, 1, &attr, blob_data(msg), blob_len(msg));
+	if (!attr)
+		return;
+
+	path = blobmsg_data(attr);
+
+	if (path && strncmp(path, BBFDM_UBUS_OBJECT".", strlen(BBFDM_UBUS_OBJECT) + 1) == 0) {
+
+		BBFDM_ERR("Detected new service registration: '%s'", path);
+
+		list_for_each_entry(service, &registered_services, list) {
+			// Check if the service is present in the registred services list
+			if (strcmp(service->name, path) == 0) {
+				service->is_blacklisted = false;
+				service->consecutive_timeouts = 0;
+				service_found = true;
+				BBFDM_ERR("Service '%s' found in registry. Resetting blacklist and timeout counters.", path);
+				break;
+			}
+
+			if (!service_found) {
+				BBFDM_ERR("Newly registered service '%s' is not recognized in the registry."
+						  " Possible missing configuration JSON file under '%s'.",
+						  path, BBFDM_MICROSERVICE_INPUT_PATH);
+	        }
+		}
+	}
+}
+
 static const struct blobmsg_policy bbfdm_policy[] = {
 	[BBFDM_PATH] = { .name = "path", .type = BLOBMSG_TYPE_STRING },
 	[BBFDM_VALUE] = { .name = "value", .type = BLOBMSG_TYPE_STRING },
@@ -72,10 +116,13 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 
 	list_for_each_entry(service, &registered_services, list) {
 
+		if (service->is_blacklisted)
+			continue;
+
 		if (!is_path_match(context->requested_path, requested_proto, service))
 			continue;
 
-		run_async_call(context, service->name, msg);
+		run_async_call(context, service, msg);
 	}
 
 	context->service_list_processed = true;
@@ -116,6 +163,9 @@ static int bbfdm_handler_sync(struct ubus_context *ctx, struct ubus_object *obj,
 	fill_optional_input(tb[BBFDM_INPUT], &requested_proto, &raw_format);
 
 	list_for_each_entry(service, &registered_services, list) {
+
+		if (service->is_blacklisted)
+			continue;
 
 		if (!is_path_match(requested_path, requested_proto, service))
 			continue;
@@ -181,6 +231,10 @@ static void usage(char *prog)
 int main(int argc, char **argv)
 {
 	struct ubus_context ubus_ctx = {0};
+	struct ubus_event_handler add_event = {
+		.cb = bbfdm_ubus_add_event_cb,
+	};
+
 	char *cli_argv[4] = {0};
 	int err = 0, ch, cli_argc = 0, i;
 
@@ -236,11 +290,15 @@ int main(int argc, char **argv)
 		goto end;
 	}
 
+	if (ubus_register_event_handler(&ubus_ctx, &add_event, "ubus.object.add"))
+		goto end;
+
 	BBFDM_INFO("Waiting on uloop....");
 	uloop_run();
 
 end:
 	BBFDM_DEBUG("BBFDMD exits");
+	ubus_unregister_event_handler(&ubus_ctx, &add_event);
 	unregister_services();
 	uloop_done();
 	ubus_shutdown(&ubus_ctx);

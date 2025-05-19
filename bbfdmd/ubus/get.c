@@ -321,6 +321,16 @@ static void handle_request_timeout(struct uloop_timeout *timeout)
 	ubus_abort_request(tracker->ctx->ubus_ctx, &tracker->async_request);
 	tracker->ctx->pending_requests--;
 
+	service_entry_t *service = tracker->service;
+
+	if (service) {
+		service->consecutive_timeouts++;
+		if (service->consecutive_timeouts >= SERVICE_MAX_CONSECUTIVE_TIMEOUTS) {
+			service->is_blacklisted = true;
+			BBFDM_ERR("Service '%s' has been blacklisted due to repeated timeouts", service->name);
+		}
+	}
+
 	if (tracker->ctx->pending_requests == 0 && tracker->ctx->service_list_processed) {
 		BBFDM_ERR("All requests completed after timeout");
 		send_response(tracker->ctx);
@@ -347,6 +357,9 @@ static void ubus_request_complete(struct ubus_request *req, int ret)
 	uloop_timeout_cancel(&tracker->timeout);
 	tracker->ctx->pending_requests--;
 
+	if (tracker->service && ret == UBUS_STATUS_OK)
+		tracker->service->consecutive_timeouts = 0;
+
 	if (tracker->ctx->pending_requests == 0 && tracker->ctx->service_list_processed) {
 		BBFDM_DEBUG("Result Callback: All requests completed");
 		send_response(tracker->ctx);
@@ -355,20 +368,20 @@ static void ubus_request_complete(struct ubus_request *req, int ret)
 	BBFDM_FREE(tracker);
 }
 
-void run_async_call(struct async_request_context *ctx, const char *ubus_obj, struct blob_attr *msg)
+void run_async_call(struct async_request_context *ctx, service_entry_t *service, struct blob_attr *msg)
 {
 	struct blob_buf req_buf = {0};
 	struct blob_attr *attr = NULL;
 	int remaining = 0;
 	uint32_t id = 0;
 
-	if (!ctx || !ubus_obj || !msg) {
+	if (!ctx || !service || !msg || !service->name) {
 		BBFDM_ERR("Invalid arguments");
 		return;
 	}
 
-	if (ubus_lookup_id(ctx->ubus_ctx, ubus_obj, &id)) {
-		BBFDM_ERR("Failed to lookup object: %s", ubus_obj);
+	if (ubus_lookup_id(ctx->ubus_ctx, service->name, &id)) {
+		BBFDM_ERR("Failed to lookup object: %s", service->name);
 		return;
 	}
 
@@ -379,6 +392,7 @@ void run_async_call(struct async_request_context *ctx, const char *ubus_obj, str
 	}
 
 	tracker->ctx = ctx;
+	tracker->service = service;
 	ctx->pending_requests++;
 	ctx->path_matched = true;
 
@@ -389,14 +403,14 @@ void run_async_call(struct async_request_context *ctx, const char *ubus_obj, str
 		blobmsg_add_field(&req_buf, blobmsg_type(attr), blobmsg_name(attr), blobmsg_data(attr), blobmsg_len(attr));
 	}
 
-	snprintf(tracker->request_name, sizeof(tracker->request_name), "%s->%s", ubus_obj, ctx->ubus_method);
+	snprintf(tracker->request_name, sizeof(tracker->request_name), "%s->%s", service->name, ctx->ubus_method);
 
 	tracker->timeout.cb = handle_request_timeout;
 	uloop_timeout_set(&tracker->timeout, !strcmp(ctx->ubus_method, "operate") ? SERVICE_CALL_OPERATE_TIMEOUT : SERVICE_CALL_TIMEOUT);
 
 	if (g_log_level == LOG_DEBUG) {
 		char *json_str = blobmsg_format_json_indent(req_buf.head, true, -1);
-		BBFDM_DEBUG("### ubus call %s %s '%s' ###", ubus_obj, ctx->ubus_method, json_str);
+		BBFDM_DEBUG("### ubus call %s %s '%s' ###", service->name, ctx->ubus_method, json_str);
 		BBFDM_FREE(json_str);
 	}
 
