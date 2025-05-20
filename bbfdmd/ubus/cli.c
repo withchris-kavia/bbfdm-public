@@ -152,7 +152,7 @@ static int cli_exec_cmd(cli_data_t *cli_data, const char *path, const char *valu
 	int e = bbfdm_ubus_invoke(BBFDM_UBUS_OBJECT, cli_data->cmd, b.head, __ubus_callback, cli_data);
 
 	if (e < 0) {
-		printf("ERROR: ubus invoke for [object:%s method:%s] exit with error(%d)\n", BBFDM_UBUS_OBJECT, cli_data->cmd, e);
+		printf("ERROR: [bbfdmd-cli] ubus invoke for [object:%s method:%s] exit with error(%d)\n", BBFDM_UBUS_OBJECT, cli_data->cmd, e);
 		err = EXIT_FAILURE;
 	}
 

@@ -43,6 +43,23 @@ static json_object *json_res = NULL;
 
 static const struct dm_ubus_cache_entry * dm_ubus_cache_lookup(unsigned hash);
 
+static const char *dm_ubus_str_error[__UBUS_STATUS_LAST] = {
+	[UBUS_STATUS_OK] = "Success",
+	[UBUS_STATUS_INVALID_COMMAND] = "Invalid command",
+	[UBUS_STATUS_INVALID_ARGUMENT] = "Invalid argument",
+	[UBUS_STATUS_METHOD_NOT_FOUND] = "Method not found",
+	[UBUS_STATUS_NOT_FOUND] = "Not found",
+	[UBUS_STATUS_NO_DATA] = "No response",
+	[UBUS_STATUS_PERMISSION_DENIED] = "Permission denied",
+	[UBUS_STATUS_TIMEOUT] = "Request timed out",
+	[UBUS_STATUS_NOT_SUPPORTED] = "Operation not supported",
+	[UBUS_STATUS_UNKNOWN_ERROR] = "Unknown error",
+	[UBUS_STATUS_CONNECTION_FAILED] = "Connection failed",
+	[UBUS_STATUS_NO_MEMORY] = "Out of memory",
+	[UBUS_STATUS_PARSE_ERROR] = "Parsing message data failed",
+	[UBUS_STATUS_SYSTEM_ERROR] = "System error",
+};
+
 static void prepare_blob_message(struct blob_buf *b, const struct ubus_arg u_args[], int u_args_size)
 {
 	if (!b)
@@ -99,7 +116,15 @@ static int __dm_ubus_call_internal(const char *obj, const char *method, int time
 		return -1;
 	}
 
-	return ubus_invoke(ubus_ctx, id, method, attr, receive_call_result_data, NULL, timeout);
+	int err = ubus_invoke(ubus_ctx, id, method, attr, receive_call_result_data, NULL, timeout);
+
+	if (err != 0) {
+		const char *err_msg = (err >= 0 && err < __UBUS_STATUS_LAST) ? dm_ubus_str_error[err] : "Unknown error";
+		BBF_ERR("UBUS invoke failed [object: %s, method: %s, timeout: %d ms] with error (%s:%d)",
+				obj, method, timeout, err_msg, err);
+	}
+
+	return err;
 }
 
 static int __dm_ubus_call(const char *obj, const char *method, struct blob_attr *attr)
@@ -338,6 +363,12 @@ static int dmubus_call_blob_internal(const char *obj, const char *method, json_o
 
 	rc = ubus_invoke(ubus_ctx, id, method, blob.head, receive_call_result_data, NULL, timeout);
 
+	if (rc != 0) {
+		const char *err_msg = (rc >= 0 && rc < __UBUS_STATUS_LAST) ? dm_ubus_str_error[rc] : "Unknown error";
+		BBF_ERR("UBUS invoke failed [object: %s, method: %s, timeout: %d ms] with error (%s:%d)",
+				obj, method, timeout, err_msg, rc);
+	}
+
 	if (resp) *resp = json_res;
 	blob_buf_free(&blob);
 	return rc;
@@ -386,6 +417,12 @@ static int dmubus_call_blob_msg_internal(const char *obj, const char *method, st
 	}
 
 	rc = ubus_invoke(ubus_ctx, id, method, data->head, receive_call_result_data, NULL, timeout);
+
+	if (rc != 0) {
+		const char *err_msg = (rc >= 0 && rc < __UBUS_STATUS_LAST) ? dm_ubus_str_error[rc] : "Unknown error";
+		BBF_ERR("UBUS invoke failed [object: %s, method: %s, timeout: %d ms] with error (%s:%d)",
+				obj, method, timeout, err_msg, rc);
+	}
 
 	if (resp)
 		*resp = json_res;
