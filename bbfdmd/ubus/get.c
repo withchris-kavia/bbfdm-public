@@ -21,9 +21,11 @@ extern int g_log_level;
 
 static void add_linker_entry(struct async_request_context *ctx, const char *linker_path, const char *linker_value)
 {
-	struct linker_args *linker = calloc(1, sizeof(struct linker_args));
-	if (!linker)
+	struct linker_args *linker = (struct linker_args *)calloc(1, sizeof(struct linker_args));
+	if (!linker) {
+		BBFDM_ERR("Failed to allocate memory");
 		return;
+	}
 
 	list_add_tail(&linker->list, &ctx->linker_list);
 	linker->path = strdup(linker_path ? linker_path : "");
@@ -218,11 +220,7 @@ static void prepare_and_send_response(struct async_request_context *ctx)
 	void *array = blobmsg_open_array(&bb_raw, "results");
 
 	if (ctx->path_matched == false) {
-		void *table = blobmsg_open_table(&bb_raw, NULL);
-		blobmsg_add_string(&bb_raw, "path", ctx->requested_path);
-		blobmsg_add_u32(&bb_raw, "fault", 9005);
-		blobmsg_add_string(&bb_raw, "fault_msg", "Invalid parameter name");
-		blobmsg_close_table(&bb_raw, table);
+		print_fault_message(&bb_raw, ctx->requested_path, 9005, "Invalid parameter name");
 	} else {
 		blobmsg_for_each_attr(attr, ctx->tmp_bb.head, remaining) {
 			if (strcmp(ctx->ubus_method, "get") == 0) {
@@ -292,7 +290,7 @@ void send_response(struct async_request_context *ctx)
 	ubus_complete_deferred_request(ctx->ubus_ctx, &ctx->request_data, UBUS_STATUS_OK);
 	blob_buf_free(&ctx->tmp_bb);
 
-	BBFDM_INFO("END: ubus method|%s|, name|bbfdm|", ctx->ubus_method);
+	BBFDM_INFO("END: ubus method|%s|, name|bbfdm|, path|%s|", ctx->ubus_method, ctx->requested_path);
 	BBFDM_FREE(ctx);
 }
 
@@ -316,7 +314,7 @@ static void append_response_data(struct ubus_request_tracker *tracker, struct bl
 static void handle_request_timeout(struct uloop_timeout *timeout)
 {
 	struct ubus_request_tracker *tracker = container_of(timeout, struct ubus_request_tracker, timeout);
-	BBFDM_ERR("Timeout occurred for request: '%s'", tracker->request_name);
+	BBFDM_ERR("Timeout occurred for request: '%s %s'", tracker->request_name, tracker->ctx->requested_path);
 
 	ubus_abort_request(tracker->ctx->ubus_ctx, &tracker->async_request);
 	tracker->ctx->pending_requests--;
@@ -344,7 +342,7 @@ static void ubus_result_callback(struct ubus_request *req, int type __attribute_
 	struct ubus_request_tracker *tracker = container_of(req, struct ubus_request_tracker, async_request);
 
 	if (msg) {
-		BBFDM_DEBUG("Response from object '%s'", tracker->request_name);
+		BBFDM_DEBUG("Response from object '%s %s'", tracker->request_name, tracker->ctx->requested_path);
 		append_response_data(tracker, msg);
 	}
 }
@@ -352,7 +350,7 @@ static void ubus_result_callback(struct ubus_request *req, int type __attribute_
 static void ubus_request_complete(struct ubus_request *req, int ret)
 {
 	struct ubus_request_tracker *tracker = container_of(req, struct ubus_request_tracker, async_request);
-	BBFDM_DEBUG("Request completed for '%s' with status: '%d'", tracker->request_name, ret);
+	BBFDM_DEBUG("Request completed for '%s %s' with status: '%d'", tracker->request_name, tracker->ctx->requested_path, ret);
 
 	uloop_timeout_cancel(&tracker->timeout);
 	tracker->ctx->pending_requests--;
@@ -385,7 +383,7 @@ void run_async_call(struct async_request_context *ctx, service_entry_t *service,
 		return;
 	}
 
-	struct ubus_request_tracker *tracker = calloc(1, sizeof(struct ubus_request_tracker));
+	struct ubus_request_tracker *tracker = (struct ubus_request_tracker *)calloc(1, sizeof(struct ubus_request_tracker));
 	if (!tracker) {
 		BBFDM_ERR("Failed to allocate memory for request tracker");
 		return;

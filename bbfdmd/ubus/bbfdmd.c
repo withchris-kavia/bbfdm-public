@@ -27,8 +27,7 @@
 extern struct list_head registered_services;
 extern int g_log_level;
 
-static void bbfdm_ubus_add_event_cb(struct ubus_context *ctx __attribute__((unused)),
-		struct ubus_event_handler *ev __attribute__((unused)),
+static void bbfdm_ubus_add_event_cb(struct ubus_context *ctx, struct ubus_event_handler *ev __attribute__((unused)),
 		const char *type, struct blob_attr *msg)
 {
 	const struct blobmsg_policy policy = {
@@ -58,17 +57,73 @@ static void bbfdm_ubus_add_event_cb(struct ubus_context *ctx __attribute__((unus
 				service->is_blacklisted = false;
 				service->consecutive_timeouts = 0;
 				service_found = true;
+				fill_service_schema(ctx, 5000, service->name, &service->dm_schema);
 				BBFDM_ERR("Service '%s' found in registry. Resetting blacklist and timeout counters.", path);
 				break;
 			}
+		}
 
-			if (!service_found) {
-				BBFDM_ERR("Newly registered service '%s' is not recognized in the registry."
-						  " Possible missing configuration JSON file under '%s'.",
-						  path, BBFDM_MICROSERVICE_INPUT_PATH);
-	        }
+		if (!service_found) {
+			BBFDM_ERR("Newly registered service '%s' is not recognized in the registry."
+					  " Possible missing configuration JSON file under '%s'.",
+					  path, BBFDM_MICROSERVICE_INPUT_PATH);
 		}
 	}
+}
+
+static void bbfdm_handle_schema_request(struct ubus_context *ctx, struct ubus_request_data *req,
+		const char *requested_path, unsigned int requested_proto)
+{
+	struct blob_buf bb = {0};
+	bool schema_found = false;
+	int len = strlen(requested_path);
+
+	memset(&bb, 0, sizeof(struct blob_buf));
+	blob_buf_init(&bb, 0);
+
+	void *array = blobmsg_open_array(&bb, "results");
+
+	if (len > 0 && requested_path[len - 1] == '.') {
+		service_entry_t *service = NULL;
+
+		list_for_each_entry(service, &registered_services, list) {
+
+			if (service->is_blacklisted ||
+				!service_path_match(requested_path, requested_proto, service) ||
+				!service->dm_schema)
+				continue;
+
+			struct blob_attr *attr = NULL;
+			size_t remaining = 0;
+			const struct blobmsg_policy policy[] = {
+					{ "path", BLOBMSG_TYPE_STRING },
+			};
+
+			blobmsg_for_each_attr(attr, service->dm_schema->head, remaining) {
+				struct blob_attr *fields[1];
+
+				blobmsg_parse(policy, 1, fields, blobmsg_data(attr), blobmsg_len(attr));
+
+				char *path = fields[0] ? blobmsg_get_string(fields[0]) : "";
+
+				if (strlen(path) == 0)
+					continue;
+
+				if (strncmp(requested_path, path, len) == 0) {
+					blobmsg_add_blob(&bb, attr);
+					schema_found = true;
+				}
+			}
+		}
+	}
+
+	if (!schema_found)
+		print_fault_message(&bb, requested_path, 7026, "Path is not present in the data model schema");
+
+	blobmsg_close_array(&bb, array);
+
+	ubus_send_reply(ctx, req, bb.head);
+	blob_buf_free(&bb);
 }
 
 static const struct blobmsg_policy bbfdm_policy[] = {
@@ -83,6 +138,7 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 	struct blob_attr *tb[__BBFDM_MAX];
 	service_entry_t *service = NULL;
 	unsigned int requested_proto = BBFDMD_BOTH;
+	bool raw_format = false;
 
 	if (blobmsg_parse(bbfdm_policy, __BBFDM_MAX, tb, blob_data(msg), blob_len(msg))) {
 		BBFDM_ERR("Failed to parse input message");
@@ -94,23 +150,32 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 		return UBUS_STATUS_INVALID_ARGUMENT;
 	}
 
-	struct async_request_context *context = calloc(1, sizeof(struct async_request_context));
+	char *requested_path = blobmsg_get_string(tb[BBFDM_PATH]);
+	fill_optional_input(tb[BBFDM_INPUT], &requested_proto, &raw_format);
+
+	if (strcmp(method, "schema") == 0 && requested_proto != BBFDMD_CWMP) {
+		BBFDM_INFO("START: ubus method|%s|, name|%s|, path|%s|, proto|%u|", method, obj->name, requested_path, requested_proto);
+		bbfdm_handle_schema_request(ctx, req, requested_path, requested_proto);
+		BBFDM_INFO("END: ubus method|%s|, name|%s|, path|%s|, proto|%u|", method, obj->name, requested_path, requested_proto);
+		return 0;
+	}
+
+	struct async_request_context *context = (struct async_request_context *)calloc(1, sizeof(struct async_request_context));
 	if (!context) {
 		BBFDM_ERR("Failed to allocate memory");
 		return UBUS_STATUS_UNKNOWN_ERROR;
 	}
 
-	BBFDM_INFO("START: ubus method|%s|, name|%s|", method, obj->name);
+	BBFDM_INFO("START: ubus method|%s|, name|%s|, path|%s|, proto|%u|", method, obj->name, requested_path, requested_proto);
 
-	snprintf(context->requested_path, sizeof(context->requested_path), "%s", blobmsg_get_string(tb[BBFDM_PATH]));
+	snprintf(context->requested_path, sizeof(context->requested_path), "%s", requested_path);
 	snprintf(context->ubus_method, sizeof(context->ubus_method), "%s", method);
 
 	context->ubus_ctx = ctx;
+	context->raw_format = raw_format;
 
 	memset(&context->tmp_bb, 0, sizeof(struct blob_buf));
 	blob_buf_init(&context->tmp_bb, 0);
-
-	fill_optional_input(tb[BBFDM_INPUT], &requested_proto, &context->raw_format);
 
 	ubus_defer_request(ctx, req, &context->request_data);
 
@@ -119,7 +184,7 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 		if (service->is_blacklisted)
 			continue;
 
-		if (!is_path_match(context->requested_path, requested_proto, service))
+		if (!service_path_match(context->requested_path, requested_proto, service))
 			continue;
 
 		run_async_call(context, service, msg);
@@ -167,7 +232,7 @@ static int bbfdm_handler_sync(struct ubus_context *ctx, struct ubus_object *obj,
 		if (service->is_blacklisted)
 			continue;
 
-		if (!is_path_match(requested_path, requested_proto, service))
+		if (!service_path_match(requested_path, requested_proto, service))
 			continue;
 
 		run_sync_call(service->name, method, msg, &bb);

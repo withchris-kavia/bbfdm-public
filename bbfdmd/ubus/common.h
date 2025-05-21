@@ -12,6 +12,7 @@
 #ifndef BBFDMD_COMMON_H
 #define BBFDMD_COMMON_H
 
+#include <regex.h>
 #include "libbbfdm-api/version-2/bbfdm_api.h"
 
 #define BBFDM_ROOT_OBJECT "Device."
@@ -36,7 +37,10 @@ void fill_optional_input(struct blob_attr *msg, unsigned int *proto, bool *raw_f
 
 struct blob_attr *get_results_array(struct blob_attr *msg);
 
-bool proto_matches(unsigned int dm_type, const enum bbfdmd_type_enum type);
+bool str_match(const char *string, const char *pattern, size_t nmatch, regmatch_t pmatch[]);
+bool proto_match(unsigned int dm_type, const enum bbfdmd_type_enum type);
+
+void print_fault_message(struct blob_buf *blob_buf, const char *path, uint32_t fault_code, const char *fault_msg);
 
 void run_sync_call(const char *ubus_obj, const char *ubus_method, struct blob_attr *msg, struct blob_buf *bb_response);
 

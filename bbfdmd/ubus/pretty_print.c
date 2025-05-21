@@ -9,7 +9,6 @@
  *
  */
 
-#include <regex.h>
 #include <sys/param.h>
 #include <libubus.h>
 #include <libubox/blobmsg_json.h>
@@ -79,23 +78,6 @@ static void free_pv_list(struct list_head *pv_list)
 		list_del(&iter->list);
 		BBFDM_FREE(iter);
 	}
-}
-
-static bool match(const char *string, const char *pattern, size_t nmatch, regmatch_t pmatch[])
-{
-	regex_t re;
-
-	if (!string || !pattern)
-		return 0;
-
-	if (regcomp(&re, pattern, REG_EXTENDED) != 0)
-		return 0;
-
-	int status = regexec(&re, string, nmatch, pmatch, 0);
-
-	regfree(&re);
-
-	return (status != 0) ? false : true;
 }
 
 static bool is_node_instance(const char *path)
@@ -473,7 +455,7 @@ static void prepare_result_blob(struct blob_buf *bb, struct list_head *pv_list)
 
 static bool is_res_required(const char *str, size_t s_len, size_t *start, size_t *len)
 {
-	if (match(str, GLOB_CHAR, 0, NULL)) {
+	if (str_match(str, GLOB_CHAR, 0, NULL)) {
 		char *star = strchr(str, '*');
 
 		*start = (star) ? (size_t)labs(star - str) : s_len;

@@ -22,9 +22,7 @@
 
 LIST_HEAD(registered_services);
 
-extern int g_log_level;
-
-static void add_service_to_list(const char *name, int service_proto, service_object_t *objects, size_t count, bool is_unified)
+static void add_service_to_list(const char *name, struct blob_buf *dm_schema, int service_proto, service_object_t *objects, size_t count, bool is_unified)
 {
 	service_entry_t *service = NULL;
 
@@ -33,14 +31,81 @@ static void add_service_to_list(const char *name, int service_proto, service_obj
 		return;
 	}
 
-	service = calloc(1, sizeof(service_entry_t));
+	service = (service_entry_t *)calloc(1, sizeof(service_entry_t));
+	if (!service) {
+		BBFDM_ERR("Failed to allocate memory");
+		return;
+	}
+
 	list_add_tail(&service->list, &registered_services);
 
 	service->name = strdup(name);
+	service->dm_schema = dm_schema;
 	service->protocol = service_proto;
 	service->objects = objects;
 	service->object_count = count;
 	service->is_unified = is_unified;
+}
+
+static void receive_schema_result(struct ubus_request *req, int type __attribute__((unused)), struct blob_attr *msg)
+{
+	struct blob_attr *attr = NULL;
+	int remaining = 0;
+
+	if (msg == NULL || req == NULL)
+		return;
+
+	struct blob_buf *srv_schema = (struct blob_buf *)req->priv;
+	if (!srv_schema)
+		return;
+
+	struct blob_attr *results = get_results_array(msg);
+	if (!results)
+		return;
+
+	blobmsg_for_each_attr(attr, results, remaining) {
+		blobmsg_add_blob(srv_schema, attr);
+	}
+}
+
+void fill_service_schema(struct ubus_context *ubus_ctx, int ubus_timeout, const char *service_name, struct blob_buf **service_schema)
+{
+	uint32_t ubus_id;
+
+	if (!ubus_ctx || !service_name || !service_schema)
+		return;
+
+	if (*service_schema != NULL) {
+		blob_buf_free(*service_schema);
+		BBFDM_FREE(*service_schema);
+	}
+
+	if (!ubus_lookup_id(ubus_ctx, service_name, &ubus_id)) {
+		struct blob_buf bb = {0};
+
+		*service_schema = (struct blob_buf *)calloc(1, sizeof(struct blob_buf));
+		if (*service_schema == NULL) {
+			BBFDM_ERR("Failed to allocate memory");
+			return;
+		}
+
+		blob_buf_init(*service_schema, 0);
+
+		memset(&bb, 0, sizeof(struct blob_buf));
+		blob_buf_init(&bb, 0);
+
+		blobmsg_add_string(&bb, "path", BBFDM_ROOT_OBJECT);
+
+		int err = ubus_invoke(ubus_ctx, ubus_id, "schema", bb.head, receive_schema_result, (void *)*service_schema, ubus_timeout);
+
+		if (err != 0) {
+			BBFDM_ERR("UBUS invoke failed [object: %s, method: schema] with error (%d)", service_name, err);
+		}
+
+		blob_buf_free(&bb);
+	} else {
+		BBFDM_WARNING("Failed to lookup UBUS object: %s", service_name);
+	}
 }
 
 static int load_service_from_file(struct ubus_context *ubus_ctx, const char *filename, const char *file_path)
@@ -75,13 +140,11 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 		return -1;
 	}
 
+	struct blob_buf *service_schema = NULL;
 	char service_name[MAX_PATH_LENGTH] = {0};
-	snprintf(service_name, sizeof(service_name), "%s.%.*s", BBFDM_UBUS_OBJECT, (int)(strlen(filename) - 5), filename);
 
-	uint32_t ubus_id;
-	if (ubus_lookup_id(ubus_ctx, service_name, &ubus_id)) {
-		BBFDM_WARNING("Failed to lookup UBUS object: %s", service_name);
-	}
+	snprintf(service_name, sizeof(service_name), "%s.%.*s", BBFDM_UBUS_OBJECT, (int)(strlen(filename) - 5), filename);
+	fill_service_schema(ubus_ctx, 2000, service_name, &service_schema);
 
 	json_object *unified_daemon_jobj = NULL;
 	json_object_object_get_ex(daemon_config, "unified_daemon", &unified_daemon_jobj);
@@ -104,7 +167,12 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 		return -1;
 	}
 
-	service_object_t *objects = calloc(service_count, sizeof(service_object_t));
+	service_object_t *objects = (service_object_t *)calloc(service_count, sizeof(service_object_t));
+	if (!objects) {
+		BBFDM_ERR("Failed to allocate memory");
+		json_object_put(json_root);
+		return -1;
+	}
 
 	for (size_t i = 0; i < service_count; i++) {
 		json_object *service_obj = json_object_array_get_idx(services_array, i);
@@ -127,7 +195,7 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 	}
 
 	BBFDM_INFO("Registering [%s :: %lu :: %d]", service_name, num_objs, is_unified);
-	add_service_to_list(service_name, service_proto, objects, num_objs, is_unified);
+	add_service_to_list(service_name, service_schema, service_proto, objects, num_objs, is_unified);
 	json_object_put(json_root);
 	return 0;
 }
@@ -184,6 +252,12 @@ void unregister_services(void)
 
     list_for_each_entry_safe(service, tmp, &registered_services, list) {
         list_del(&service->list);
+
+        if (service->dm_schema) {
+            blob_buf_free(service->dm_schema);
+            BBFDM_FREE(service->dm_schema);
+        }
+
         BBFDM_FREE(service->name);
         BBFDM_FREE(service->objects);
         BBFDM_FREE(service);
@@ -236,9 +310,9 @@ void list_registered_services(struct blob_buf *bb)
 	blobmsg_close_array(bb, array);
 }
 
-bool is_path_match(const char *requested_path, unsigned int requested_proto, service_entry_t *service)
+bool service_path_match(const char *requested_path, unsigned int requested_proto, service_entry_t *service)
 {
-	if (!proto_matches(requested_proto, service->protocol))
+	if (!proto_match(requested_proto, service->protocol))
 		return false;
 
 	if (strlen(requested_path) == 0 || strcmp(requested_path, BBFDM_ROOT_OBJECT) == 0)
@@ -250,7 +324,7 @@ bool is_path_match(const char *requested_path, unsigned int requested_proto, ser
 	for (size_t idx = 0; idx < service->object_count; idx++) {
 		char current_obj[MAX_PATH_LENGTH] = {0};
 
-		if (!proto_matches(requested_proto, service->objects[idx].protocol))
+		if (!proto_match(requested_proto, service->objects[idx].protocol))
 			continue;
 
 		snprintf(current_obj, sizeof(current_obj), "%s%s", service->objects[idx].parent_path, service->objects[idx].object_name);

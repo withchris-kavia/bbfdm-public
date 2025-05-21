@@ -20,6 +20,7 @@ typedef struct {
 
 typedef struct service_entry {
     struct list_head list;
+    struct blob_buf *dm_schema;
     char *name;
     enum bbfdmd_type_enum protocol;
     bool is_unified;
@@ -32,7 +33,8 @@ typedef struct service_entry {
 int register_services(struct ubus_context *ctx);
 void unregister_services(void);
 void list_registered_services(struct blob_buf *bb);
+void fill_service_schema(struct ubus_context *ubus_ctx, int ubus_timeout, const char *service_name, struct blob_buf **service_schema);
 
-bool is_path_match(const char *requested_path, unsigned int requested_proto, service_entry_t *service);
+bool service_path_match(const char *requested_path, unsigned int requested_proto, service_entry_t *service);
 
 #endif /* BBFDMD_SERVICE_H */

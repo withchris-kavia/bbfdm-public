@@ -88,9 +88,38 @@ struct blob_attr *get_results_array(struct blob_attr *msg)
 	return tb[0];
 }
 
-bool proto_matches(unsigned int dm_type, const enum bbfdmd_type_enum type)
+bool str_match(const char *string, const char *pattern, size_t nmatch, regmatch_t pmatch[])
+{
+	regex_t re;
+
+	if (!string || !pattern)
+		return false;
+
+	if (regcomp(&re, pattern, REG_EXTENDED) != 0)
+		return false;
+
+	int status = regexec(&re, string, nmatch, pmatch, 0);
+
+	regfree(&re);
+
+	return (status != 0) ? false : true;
+}
+
+bool proto_match(unsigned int dm_type, const enum bbfdmd_type_enum type)
 {
 	return (dm_type == BBFDMD_BOTH || type == BBFDMD_BOTH || dm_type == type) && type != BBFDMD_NONE;
+}
+
+void print_fault_message(struct blob_buf *blob_buf, const char *path, uint32_t fault_code, const char *fault_msg)
+{
+	if (!blob_buf || !path || !fault_msg)
+		return;
+
+	void *table = blobmsg_open_table(blob_buf, NULL);
+	blobmsg_add_string(blob_buf, "path", path);
+	blobmsg_add_u32(blob_buf, "fault", fault_code);
+	blobmsg_add_string(blob_buf, "fault_msg", fault_msg);
+	blobmsg_close_table(blob_buf, table);
 }
 
 static void sync_callback(struct ubus_request *req, int type __attribute__((unused)), struct blob_attr *msg)
