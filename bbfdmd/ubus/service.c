@@ -96,6 +96,10 @@ void fill_service_schema(struct ubus_context *ubus_ctx, int ubus_timeout, const 
 
 		blobmsg_add_string(&bb, "path", BBFDM_ROOT_OBJECT);
 
+		void *table = blobmsg_open_table(&bb, "optional");
+		blobmsg_add_string(&bb, "proto", "usp");
+		blobmsg_close_table(&bb, table);
+
 		int err = ubus_invoke(ubus_ctx, ubus_id, "schema", bb.head, receive_schema_result, (void *)*service_schema, ubus_timeout);
 
 		if (err != 0) {
