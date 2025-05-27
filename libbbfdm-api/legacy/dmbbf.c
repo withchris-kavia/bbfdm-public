@@ -330,6 +330,7 @@ static bool check_dependency(const char *conf_obj)
 	/* multiple ubus => "ubus:system->info,dsl->status,wifi" */
 	/* one package => "opkg:icwmp" */
 	/* multiple packages => "opkg:icwmp,obuspa" */
+	/* directory => "dir:/sys/class/ieee80211/" */
 	/* common (files, ubus and opkg) => "file:/etc/config/network,/etc/config/dhcp;ubus:system,dsl->status;opkg:icwmp" */
 
 	char *pch = NULL, *spch = NULL;
@@ -349,6 +350,9 @@ static bool check_dependency(const char *conf_obj)
 		for (token = strtok_r(conf_name, ",", &saveptr); token != NULL; token = strtok_r(NULL, ",", &saveptr)) {
 
 			if (!strcmp(pch, "file") && !file_exists(token))
+				return false;
+
+			if (!strcmp(pch, "dir") && !bbfdm_folder_exists(token))
 				return false;
 
 			if (!strcmp(pch, "ubus") && !dmubus_object_method_exists(token))
