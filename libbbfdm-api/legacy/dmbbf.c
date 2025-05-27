@@ -348,7 +348,7 @@ static bool check_dependency(const char *conf_obj)
 		char *token, *saveptr;
 		for (token = strtok_r(conf_name, ",", &saveptr); token != NULL; token = strtok_r(NULL, ",", &saveptr)) {
 
-			if (!strcmp(pch, "file") && !file_exists(token))
+			if (!strcmp(pch, "file") && !bbfdm_file_nonzero(token))
 				return false;
 
 			if (!strcmp(pch, "ubus") && !dmubus_object_method_exists(token))

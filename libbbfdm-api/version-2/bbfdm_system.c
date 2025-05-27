@@ -35,6 +35,22 @@ bool bbfdm_file_exists(const char *path)
 	return stat(path, &buffer) == 0;
 }
 
+bool bbfdm_file_nonzero(const char *path)
+{
+	struct stat file_stats = {0};
+	int ret;
+
+	if (!path)
+		return false;
+
+	ret = stat(path, &file_stats);
+	if ((ret == 0) && (file_stats.st_size != 0)) {
+		return true;
+	}
+
+	return false;
+}
+
 bool bbfdm_is_regular_file(const char *path)
 {
 	struct stat buffer;
