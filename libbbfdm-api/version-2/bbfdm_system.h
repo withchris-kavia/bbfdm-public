@@ -37,17 +37,6 @@ bool bbfdm_folder_exists(const char *path);
 bool bbfdm_file_exists(const char *path);
 
 /**
- * @brief Check if a file exists at the given path.
- *
- * This function verifies the existence of a file at the specified path and also
- * checks if file is not empty
- *
- * @param[in] path Path to the file.
- * @return true if the file exists and non-empty, false otherwise.
- */
-bool bbfdm_file_nonzero(const char *path);
-
-/**
  * @brief Check if a file is a regular file.
  *
  * This function determines whether the file at the specified path is a regular file.
