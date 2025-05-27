@@ -240,12 +240,14 @@ int bbf_entry_method(struct dmctx *ctx, int cmd)
 void bbf_global_init(DMOBJ *dm_entryobj, const char *plugin_path)
 {
 	dm_dynamic_initmem(&global_memhead);
+	dm_ubus_cache_init();
 	load_plugins(dm_entryobj, plugin_path);
 }
 
 void bbf_global_clean(DMOBJ *dm_entryobj)
 {
 	free_plugins(dm_entryobj);
+	dm_ubus_cache_free();
 	dm_dynamic_cleanmem(&global_memhead);
 }
 

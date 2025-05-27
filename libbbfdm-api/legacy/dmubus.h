@@ -68,4 +68,7 @@ void dm_ubus_free(struct dmctx *bbf_ctx);
 
 bool dmubus_object_method_exists(const char *obj);
 
+void dm_ubus_cache_init(void);
+void dm_ubus_cache_free(void);
+
 #endif
