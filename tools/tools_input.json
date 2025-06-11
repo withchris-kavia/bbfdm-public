@@ -296,7 +296,7 @@
       "compile": [
         "apt install libnetfilter-queue-dev -y",
         "make clean",
-        "make"
+        "make CFLAGS+='-DBBF_VENDOR_PREFI=\\\"X_IOWRT_EU_\\\" -DPARENTAL_CONTROL_ULRFILTER'"
       ],
       "post_install": [
         "cp -f urlfilter /usr/sbin/",
