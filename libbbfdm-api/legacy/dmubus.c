@@ -406,6 +406,11 @@ int dmubus_call_blob_set(const char *obj, const char *method, json_object *value
 	return __dmubus_call_blob(obj, method, UBUS_TIMEOUT, value, false, NULL);
 }
 
+int dmubus_call_blob_msg_timeout(const char *obj, const char *method, struct blob_buf *data, int timeout)
+{
+	return dm_ubus_call_sync(obj, method, timeout, data->head, NULL);
+}
+
 int dmubus_call_blob_msg_set(const char *obj, const char *method, struct blob_buf *data)
 {
 	return dm_ubus_call_sync(obj, method, UBUS_TIMEOUT, data->head, NULL);
