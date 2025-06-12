@@ -16,6 +16,27 @@
 
 int g_log_level = LOG_ERR;
 
+void init_rand_seed(void)
+{
+	srandom((unsigned int)time(NULL));
+}
+
+int rand_in_range(int min, int max)
+{
+	int range;
+
+	if (min >= max)
+		return -1;
+
+	if (min == (max - 1))
+		return min;
+
+	range = max - min;
+
+	return min + ((int)(((double)range) * ((double)random()) /
+			(((double)RAND_MAX) + 1.0)));
+}
+
 unsigned int get_proto_type(const char *proto)
 {
 	int type = BBFDMD_BOTH;

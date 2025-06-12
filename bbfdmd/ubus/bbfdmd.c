@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <syslog.h>
+#include <time.h>
 
 #include <libubus.h>
 #include <libubox/blobmsg_json.h>
@@ -24,8 +25,122 @@
 #include "get.h"
 #include "cli.h"
 
+struct ubus_context g_ubus_ctx = {0};
+
 extern struct list_head registered_services;
 extern int g_log_level;
+
+static void schedule_blacklisted_service_recovery(struct ubus_context *ctx);
+
+static void blacklisted_recovery_timer_cb(struct uloop_timeout *timeout __attribute__((unused)))
+{
+	schedule_blacklisted_service_recovery(&g_ubus_ctx);
+}
+
+static struct uloop_timeout blacklisted_recovery_timer = {
+	.cb = blacklisted_recovery_timer_cb
+};
+
+struct service_request_tracker {
+	struct ubus_context *ubus_ctx;
+	service_entry_t *service;
+	struct ubus_request async_request;
+	struct uloop_timeout timeout;
+};
+
+static void service_request_timeout(struct uloop_timeout *timeout)
+{
+	struct service_request_tracker *tracker = container_of(timeout, struct service_request_tracker, timeout);
+	if (tracker == NULL) {
+		BBFDM_ERR("Timeout occurred but tracker is not defined");
+		return;
+	}
+
+	BBFDM_ERR("Timeout occurred for request: '%s get'", tracker->service ? tracker->service->name : "unknown");
+	ubus_abort_request(tracker->ubus_ctx, &tracker->async_request);
+	BBFDM_FREE(tracker);
+}
+
+static void service_request_complete(struct ubus_request *req, int ret)
+{
+	struct service_request_tracker *tracker = container_of(req, struct service_request_tracker, async_request);
+	if (tracker == NULL) {
+		BBFDM_ERR("Request completed but tracker is not defined");
+		return;
+	}
+
+	BBFDM_DEBUG("Request completed for '%s get' with status: '%d'", tracker->service ? tracker->service->name : "", ret);
+	uloop_timeout_cancel(&tracker->timeout);
+
+	if (tracker->service && ret == UBUS_STATUS_OK) {
+		tracker->service->is_blacklisted = false;
+		tracker->service->consecutive_timeouts = 0;
+		BBFDM_INFO("Recovered blacklisted service: '%s'", tracker->service->name);
+	} else {
+		BBFDM_DEBUG("Service '%s' still unreachable", tracker->service ? tracker->service->name : "unknown");
+	}
+
+	BBFDM_FREE(tracker);
+}
+
+static void verify_service(struct ubus_context *ubus_ctx, service_entry_t *service)
+{
+	struct blob_buf req_buf = {0};
+	uint32_t id = 0;
+
+	if (!ubus_ctx || !service || !service->name) {
+		BBFDM_ERR("Invalid arguments");
+		return;
+	}
+
+	if (ubus_lookup_id(ubus_ctx, service->name, &id)) {
+		BBFDM_ERR("Failed to lookup object: %s", service->name);
+		return;
+	}
+
+	struct service_request_tracker *tracker = (struct service_request_tracker *)calloc(1, sizeof(struct service_request_tracker));
+	if (!tracker) {
+		BBFDM_ERR("Failed to allocate memory for request tracker");
+		return;
+	}
+
+	tracker->ubus_ctx = ubus_ctx;
+	tracker->service = service;
+
+	tracker->timeout.cb = service_request_timeout;
+	uloop_timeout_set(&tracker->timeout, SERVICE_CALL_TIMEOUT);
+
+	memset(&req_buf, 0, sizeof(struct blob_buf));
+	blob_buf_init(&req_buf, 0);
+
+	blobmsg_add_string(&req_buf, "path", BBFDM_ROOT_OBJECT);
+
+	if (ubus_invoke_async(ubus_ctx, id, "get", req_buf.head, &tracker->async_request)) {
+		BBFDM_ERR("Failed to invoke async method for object: '%s get'", service->name);
+		uloop_timeout_cancel(&tracker->timeout);
+		BBFDM_FREE(tracker);
+	} else {
+		tracker->async_request.complete_cb = service_request_complete;
+		ubus_complete_request_async(ubus_ctx, &tracker->async_request);
+	}
+
+	blob_buf_free(&req_buf);
+}
+
+static void schedule_blacklisted_service_recovery(struct ubus_context *ubus_ctx)
+{
+	service_entry_t *service = NULL;
+
+	list_for_each_entry(service, &registered_services, list) {
+		if (service->is_blacklisted) {
+			verify_service(ubus_ctx, service);
+		}
+	}
+
+	int next_check_time = rand_in_range(30, 60) * 1000;
+	BBFDM_DEBUG("Next blacklisted service recovery scheduled in %d msecs", next_check_time);
+	uloop_timeout_set(&blacklisted_recovery_timer, next_check_time);
+}
 
 static void bbfdm_ubus_add_event_cb(struct ubus_context *ctx, struct ubus_event_handler *ev __attribute__((unused)),
 		const char *type, struct blob_attr *msg)
@@ -295,7 +410,6 @@ static void usage(char *prog)
 
 int main(int argc, char **argv)
 {
-	struct ubus_context ubus_ctx = {0};
 	struct ubus_event_handler add_event = {
 		.cb = bbfdm_ubus_add_event_cb,
 	};
@@ -334,39 +448,43 @@ int main(int argc, char **argv)
 
 	setlogmask(LOG_UPTO(g_log_level));
 
-	err = ubus_connect_ctx(&ubus_ctx, NULL);
+	init_rand_seed(); // Seed the random number generator
+
+	err = ubus_connect_ctx(&g_ubus_ctx, NULL);
 	if (err != UBUS_STATUS_OK) {
 		BBFDM_ERR("Failed to connect to ubus");
 		return -1;
 	}
 
 	uloop_init();
-	ubus_add_uloop(&ubus_ctx);
+	ubus_add_uloop(&g_ubus_ctx);
 
-	err = register_services(&ubus_ctx);
+	err = register_services(&g_ubus_ctx);
 	if (err) {
 		BBFDM_ERR("Failed to load micro-services");
 		goto end;
 	}
 
-	err = ubus_add_object(&ubus_ctx, &bbfdm_object);
+	err = ubus_add_object(&g_ubus_ctx, &bbfdm_object);
 	if (err != UBUS_STATUS_OK) {
 		BBFDM_ERR("Failed to add ubus object: %s", ubus_strerror(err));
 		goto end;
 	}
 
-	if (ubus_register_event_handler(&ubus_ctx, &add_event, "ubus.object.add"))
+	if (ubus_register_event_handler(&g_ubus_ctx, &add_event, "ubus.object.add"))
 		goto end;
+
+	schedule_blacklisted_service_recovery(&g_ubus_ctx);
 
 	BBFDM_INFO("Waiting on uloop....");
 	uloop_run();
 
 end:
 	BBFDM_DEBUG("BBFDMD exits");
-	ubus_unregister_event_handler(&ubus_ctx, &add_event);
+	ubus_unregister_event_handler(&g_ubus_ctx, &add_event);
 	unregister_services();
 	uloop_done();
-	ubus_shutdown(&ubus_ctx);
+	ubus_shutdown(&g_ubus_ctx);
 
 	closelog();
 

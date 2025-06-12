@@ -767,7 +767,7 @@ int bbfdm_print_data_model_schema(struct bbfdm_context *bbfdm_ctx, const enum bb
 	bbf_cleanup(&bbf_ctx);
 
 	bbfdm_ctx_cleanup(bbfdm_ctx);
-	return 0;
+	return err;
 }
 
 int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)

@@ -31,6 +31,9 @@ enum bbfdmd_type_enum {
 	BBFDMD_BOTH = BBFDMD_CWMP | BBFDMD_USP,
 };
 
+void init_rand_seed(void);
+int rand_in_range(int min, int max);
+
 unsigned int get_proto_type(const char *proto);
 
 void fill_optional_input(struct blob_attr *msg, unsigned int *proto, bool *raw_format);

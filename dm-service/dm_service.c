@@ -68,6 +68,7 @@ int main(int argc, char **argv)
 	}
 
 	bbfdm_ubus_set_log_level(log_level);
+	bbfdm_ubus_load_data_model(NULL);
 
 	openlog(bbfdm_ctx.config.service_name, LOG_CONS | LOG_PID | LOG_NDELAY, LOG_LOCAL1);
 
