@@ -236,13 +236,6 @@ static int __dm_ubus_call_sync_entry(struct dm_ubus_cache_entry *entry, const ch
 
 	if (ubus_lookup_id(ubus_ctx, obj, &id)) {
 		BBF_WARNING("Failed to lookup UBUS object ID for '%s' using method '%s'", obj, method);
-
-		entry->consecutive_timeouts++;
-		if (entry->consecutive_timeouts >= UBUS_MAX_CONSECUTIVE_TIMEOUTS) {
-			entry->is_blacklisted = true;
-			BBF_ERR("UBUS [object: %s, method: %s] has been blacklisted due to repeated timeouts", obj, method);
-		}
-
 		return -1;
 	}
 
@@ -253,10 +246,12 @@ static int __dm_ubus_call_sync_entry(struct dm_ubus_cache_entry *entry, const ch
 		BBF_ERR("UBUS invoke failed [object: %s, method: %s, timeout: %d ms] with error (%s:%d)",
 				obj, method, timeout, err_msg, err);
 
-		entry->consecutive_timeouts++;
-		if (entry->consecutive_timeouts >= UBUS_MAX_CONSECUTIVE_TIMEOUTS) {
-			entry->is_blacklisted = true;
-			BBF_ERR("UBUS [object: %s, method: %s] has been blacklisted due to repeated timeouts", obj, method);
+		if (err == UBUS_STATUS_TIMEOUT) {
+			entry->consecutive_timeouts++;
+			if (entry->consecutive_timeouts >= UBUS_MAX_CONSECUTIVE_TIMEOUTS) {
+				entry->is_blacklisted = true;
+				BBF_ERR("UBUS [object: %s, method: %s] has been blacklisted due to repeated timeouts", obj, method);
+			}
 		}
 	} else {
 		entry->consecutive_timeouts = 0;
