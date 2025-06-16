@@ -22,7 +22,8 @@
 
 LIST_HEAD(registered_services);
 
-static void add_service_to_list(const char *name, struct blob_buf *dm_schema, int service_proto, service_object_t *objects, size_t count, bool is_unified)
+static void add_service_to_list(const char *name, struct blob_buf *dm_schema, int service_proto, int service_timeout,
+		service_object_t *objects, size_t count, bool is_unified)
 {
 	service_entry_t *service = NULL;
 
@@ -42,6 +43,7 @@ static void add_service_to_list(const char *name, struct blob_buf *dm_schema, in
 	service->name = strdup(name);
 	service->dm_schema = dm_schema;
 	service->protocol = service_proto;
+	service->timeout = service_timeout;
 	service->objects = objects;
 	service->object_count = count;
 	service->is_unified = is_unified;
@@ -158,6 +160,10 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 	json_object_object_get_ex(daemon_config, "proto", &proto_jobj);
 	int service_proto = get_proto_type(proto_jobj ? json_object_get_string(proto_jobj) : "");
 
+	json_object *timeout_jobj = NULL;
+	json_object_object_get_ex(daemon_config, "timeout", &timeout_jobj);
+	int service_timeout = timeout_jobj ? json_object_get_int(timeout_jobj) : SERVICE_CALL_TIMEOUT;
+
 	json_object *services_array = NULL;
 	if (!json_object_object_get_ex(daemon_config, "services", &services_array) || json_object_get_type(services_array) != json_type_array) {
 		json_object_put(json_root);
@@ -199,7 +205,7 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 	}
 
 	BBFDM_INFO("Registering [%s :: %lu :: %d]", service_name, num_objs, is_unified);
-	add_service_to_list(service_name, service_schema, service_proto, objects, num_objs, is_unified);
+	add_service_to_list(service_name, service_schema, service_proto, service_timeout, objects, num_objs, is_unified);
 	json_object_put(json_root);
 	return 0;
 }
@@ -287,6 +293,7 @@ void list_registered_services(struct blob_buf *bb)
 
 		blobmsg_add_u8(bb, "unified_daemon", service->is_unified);
 		blobmsg_add_u8(bb, "blacklisted", service->is_blacklisted);
+		blobmsg_add_u32(bb, "timeout", service->timeout);
 
 		void *objects_array = blobmsg_open_array(bb, "objects");
 		for (size_t i = 0; i < service->object_count; i++) {

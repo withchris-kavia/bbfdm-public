@@ -404,7 +404,7 @@ void run_async_call(struct async_request_context *ctx, service_entry_t *service,
 	snprintf(tracker->request_name, sizeof(tracker->request_name), "%s->%s", service->name, ctx->ubus_method);
 
 	tracker->timeout.cb = handle_request_timeout;
-	uloop_timeout_set(&tracker->timeout, !strcmp(ctx->ubus_method, "operate") ? SERVICE_CALL_OPERATE_TIMEOUT : SERVICE_CALL_TIMEOUT);
+	uloop_timeout_set(&tracker->timeout, !strcmp(ctx->ubus_method, "operate") ? SERVICE_CALL_OPERATE_TIMEOUT : service->timeout);
 
 	if (g_log_level == LOG_DEBUG) {
 		char *json_str = blobmsg_format_json_indent(req_buf.head, true, -1);

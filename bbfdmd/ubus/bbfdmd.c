@@ -108,7 +108,7 @@ static void verify_service(struct ubus_context *ubus_ctx, service_entry_t *servi
 	tracker->service = service;
 
 	tracker->timeout.cb = service_request_timeout;
-	uloop_timeout_set(&tracker->timeout, SERVICE_CALL_TIMEOUT);
+	uloop_timeout_set(&tracker->timeout, service->timeout);
 
 	memset(&req_buf, 0, sizeof(struct blob_buf));
 	blob_buf_init(&req_buf, 0);
