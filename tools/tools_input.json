@@ -61,9 +61,10 @@
       "service_name": "wifidmd",
       "unified_daemon": true,
       "daemon_name": "/usr/sbin/wifidmd",
+      "dm_info_file": "src/datamodel_description.json",
       "compile": [
         "make -C src clean",
-        "make -C src WIFIDMD_ENABLE_WIFI_DATAELEMENTS='y'"
+        "make -C src CFLAGS+='-DBBF_VENDOR_PREFIX=\\\"X_IOWRT_EU_\\\"' WIFIDMD_ENABLE_WIFI_DATAELEMENTS='y'"
       ],
       "post_install": [
         "cp -f src/wifidmd /usr/sbin/",
@@ -296,7 +297,7 @@
       "compile": [
         "apt install libnetfilter-queue-dev -y",
         "make clean",
-        "make CFLAGS+='-DBBF_VENDOR_PREFI=\\\"X_IOWRT_EU_\\\" -DPARENTAL_CONTROL_ULRFILTER'"
+        "make CFLAGS+='-DBBF_VENDOR_PREFIX=\\\"X_IOWRT_EU_\\\" -DPARENTAL_CONTROL_ULRFILTER'"
       ],
       "post_install": [
         "cp -f urlfilter /usr/sbin/",
