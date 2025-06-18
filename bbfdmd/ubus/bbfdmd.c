@@ -142,6 +142,11 @@ static void schedule_blacklisted_service_recovery(struct ubus_context *ubus_ctx)
 	uloop_timeout_set(&blacklisted_recovery_timer, next_check_time);
 }
 
+static void stop_blacklisted_service_recovery(void)
+{
+	uloop_timeout_cancel(&blacklisted_recovery_timer);
+}
+
 static void bbfdm_ubus_add_event_cb(struct ubus_context *ctx, struct ubus_event_handler *ev __attribute__((unused)),
 		const char *type, struct blob_attr *msg)
 {
@@ -481,6 +486,7 @@ int main(int argc, char **argv)
 
 end:
 	BBFDM_DEBUG("BBFDMD exits");
+	stop_blacklisted_service_recovery();
 	ubus_unregister_event_handler(&g_ubus_ctx, &add_event);
 	unregister_services();
 	uloop_done();

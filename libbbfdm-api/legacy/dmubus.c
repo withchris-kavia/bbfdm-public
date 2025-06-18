@@ -23,7 +23,11 @@ static LIST_HEAD(dm_ubus_cache);
 
 struct dm_ubus_cache_entry {
 	struct list_head list;
+	char *obj;
+	char *method;
+	struct blob_attr *attr;
 	json_object *data;
+	int timeout;
 	unsigned hash;
 	unsigned int consecutive_timeouts; // Tracks successive timeouts
 	bool is_blacklisted; // Marks if the ubus is blacklisted
@@ -41,7 +45,7 @@ struct ubus_struct {
 	bool ubus_method_exists;
 };
 
-static struct ubus_context *ubus_ctx = NULL;
+static struct ubus_context *g_ubus_ctx = NULL;
 
 static const char *dm_ubus_str_error[__UBUS_STATUS_LAST] = {
 	[UBUS_STATUS_OK] = "Success",
@@ -106,7 +110,7 @@ static struct dm_ubus_cache_entry *dm_ubus_cache_lookup(unsigned hash)
 	return entry_match;
 }
 
-static struct dm_ubus_cache_entry *dm_ubus_cache_entry_new(unsigned hash)
+static struct dm_ubus_cache_entry *dm_ubus_cache_entry_new(unsigned hash, const char *obj, const char *method, int timeout, struct blob_attr *attr)
 {
 	struct dm_ubus_cache_entry *entry = NULL;
 
@@ -119,8 +123,24 @@ static struct dm_ubus_cache_entry *dm_ubus_cache_entry_new(unsigned hash)
 	list_add_tail(&entry->list, &dm_ubus_cache);
 
 	entry->hash = hash;
+	entry->obj = strdup(obj);
+	entry->method = strdup(method);
+	entry->timeout = timeout;
 	entry->consecutive_timeouts = 0;
 	entry->is_blacklisted = false;
+
+	size_t blob_data_len = attr ? blob_raw_len(attr) : 0;
+
+	if (blob_data_len) {
+		entry->attr = (struct blob_attr *)calloc(1, blob_data_len);
+		if (entry->attr) {
+			memcpy(entry->attr, attr, blob_data_len);
+		} else {
+			BBF_ERR("Failed to allocate memory");
+		}
+	} else {
+		entry->attr = NULL;
+	}
 
 	return entry;
 }
@@ -159,7 +179,7 @@ static void dm_ubus_data_handler(struct ubus_request *req, int type, struct blob
 	}
 }
 
-static int dm_ubus_call_sync(const char *obj, const char *method, int timeout, struct blob_attr *attr, json_object **req_res)
+static int dm_ubus_call_sync(struct ubus_context *ubus_ctx, const char *obj, const char *method, int timeout, struct blob_attr *attr, json_object **req_res)
 {
 	uint32_t id = 0;
 
@@ -212,7 +232,7 @@ static void dm_ubus_data_handler_entry(struct ubus_request *req, int type, struc
 	free((char *)str);
 }
 
-static int __dm_ubus_call_sync_entry(struct dm_ubus_cache_entry *entry, const char *obj, const char *method, int timeout, struct blob_attr *attr)
+static int __dm_ubus_call_sync_entry(struct ubus_context *ubus_ctx, struct dm_ubus_cache_entry *entry, const char *obj, const char *method, int timeout, struct blob_attr *attr)
 {
 	uint32_t id = 0;
 
@@ -260,7 +280,7 @@ static int __dm_ubus_call_sync_entry(struct dm_ubus_cache_entry *entry, const ch
 	return err;
 }
 
-static int dm_ubus_call_sync_entry(const char *obj, const char *method, int timeout, struct blob_attr *attr, json_object **req_res)
+static int dm_ubus_call_sync_entry(struct ubus_context *ubus_ctx, const char *obj, const char *method, int timeout, struct blob_attr *attr, json_object **req_res)
 {
 	int err = 0;
 
@@ -285,18 +305,18 @@ static int dm_ubus_call_sync_entry(const char *obj, const char *method, int time
 
 	if (entry) {
 		if (entry->is_executed == false) {
-			err = __dm_ubus_call_sync_entry(entry, obj, method, timeout, attr);
+			err = __dm_ubus_call_sync_entry(ubus_ctx, entry, obj, method, timeout, attr);
 		}
 
 		if (req_res) *req_res = entry->data;
 	} else {
-		struct dm_ubus_cache_entry *new_entry = dm_ubus_cache_entry_new(hash);
+		struct dm_ubus_cache_entry *new_entry = dm_ubus_cache_entry_new(hash, obj, method, timeout, attr);
 		if (new_entry == NULL) {
 			if (req_res) *req_res = NULL;
 			return -1;
 		}
 
-		err = __dm_ubus_call_sync_entry(new_entry, obj, method, timeout, attr);
+		err = __dm_ubus_call_sync_entry(ubus_ctx, new_entry, obj, method, timeout, attr);
 		if (req_res) *req_res = new_entry->data;
 	}
 
@@ -329,9 +349,9 @@ static int __dmubus_call(const char *obj, const char *method, int timeout,
 	}
 
 	if (save_data)
-		rc = dm_ubus_call_sync_entry(obj, method, timeout, bb.head, req_res);
+		rc = dm_ubus_call_sync_entry(g_ubus_ctx, obj, method, timeout, bb.head, req_res);
 	else
-		rc = dm_ubus_call_sync(obj, method, timeout, bb.head, req_res);
+		rc = dm_ubus_call_sync(g_ubus_ctx, obj, method, timeout, bb.head, req_res);
 
 	blob_buf_free(&bb);
 
@@ -377,9 +397,9 @@ static int __dmubus_call_blob(const char *obj, const char *method, int timeout,
 	}
 
 	if (save_data)
-		rc = dm_ubus_call_sync_entry(obj, method, timeout, bb.head, resp);
+		rc = dm_ubus_call_sync_entry(g_ubus_ctx, obj, method, timeout, bb.head, resp);
 	else
-		rc = dm_ubus_call_sync(obj, method, timeout, bb.head, resp);
+		rc = dm_ubus_call_sync(g_ubus_ctx, obj, method, timeout, bb.head, resp);
 
 	blob_buf_free(&bb);
 
@@ -403,12 +423,12 @@ int dmubus_call_blob_set(const char *obj, const char *method, json_object *value
 
 int dmubus_call_blob_msg_timeout(const char *obj, const char *method, struct blob_buf *data, int timeout)
 {
-	return dm_ubus_call_sync(obj, method, timeout, data->head, NULL);
+	return dm_ubus_call_sync(g_ubus_ctx, obj, method, timeout, data->head, NULL);
 }
 
 int dmubus_call_blob_msg_set(const char *obj, const char *method, struct blob_buf *data)
 {
-	return dm_ubus_call_sync(obj, method, UBUS_TIMEOUT, data->head, NULL);
+	return dm_ubus_call_sync(g_ubus_ctx, obj, method, UBUS_TIMEOUT, data->head, NULL);
 }
 
 static void _bbfdm_task_callback(struct uloop_timeout *t)
@@ -611,7 +631,7 @@ bool dmubus_object_method_exists(const char *object)
 	if (object == NULL)
 		return false;
 
-	if (ubus_ctx == NULL) {
+	if (g_ubus_ctx == NULL) {
 		BBF_ERR("UBUS context is null");
 		return false;
 	}
@@ -625,7 +645,7 @@ bool dmubus_object_method_exists(const char *object)
 		*delimiter = '\0';
 	}
 
-	if (ubus_lookup(ubus_ctx, ubus_object, receive_list_result, &ubus_s))
+	if (ubus_lookup(g_ubus_ctx, ubus_object, receive_list_result, &ubus_s))
 		return false;
 
 	if (ubus_s.ubus_method_name && !ubus_s.ubus_method_exists)
@@ -634,9 +654,59 @@ bool dmubus_object_method_exists(const char *object)
 	return true;
 }
 
+static void dmubus_schedule_blacklisted_ubus_recovery(void);
+
+static void blacklisted_ubus_recovery_timer_cb(struct uloop_timeout *timeout __attribute__((unused)))
+{
+	dmubus_schedule_blacklisted_ubus_recovery();
+}
+
+static struct uloop_timeout blacklisted_ubus_recovery_timer = {
+	.cb = blacklisted_ubus_recovery_timer_cb
+};
+
+static void verify_ubus_method(struct dm_ubus_cache_entry *entry)
+{
+	struct ubus_context *ubus_ctx = ubus_connect(NULL);
+
+	int err = dm_ubus_call_sync(ubus_ctx, entry->obj, entry->method, entry->timeout, entry->attr, NULL);
+
+	if (err == 0) {
+		BBF_INFO("Recovered ubus obj |%s| method |%s|", entry->obj, entry->method);
+
+		entry->consecutive_timeouts = 0;
+		entry->is_blacklisted = false;
+	} else {
+		BBF_INFO("ubus obj |%s| method |%s| still unreachable", entry->obj, entry->method);
+	}
+
+	ubus_free(ubus_ctx);
+}
+
+static void dmubus_schedule_blacklisted_ubus_recovery(void)
+{
+	struct dm_ubus_cache_entry *entry = NULL;
+
+	list_for_each_entry(entry, &dm_ubus_cache, list) {
+		if (entry->is_blacklisted) {
+			verify_ubus_method(entry);
+		}
+	}
+
+	int next_check_time = 60000; // 1 min
+
+	BBF_DEBUG("Next blacklisted ubus recovery scheduled in %d msecs", next_check_time);
+	uloop_timeout_set(&blacklisted_ubus_recovery_timer, next_check_time);
+}
+
+static void dmubus_stop_blacklisted_ubus_recovery(void)
+{
+	uloop_timeout_cancel(&blacklisted_ubus_recovery_timer);
+}
+
 void dm_ubus_init(struct dmctx *bbf_ctx)
 {
-	bbf_ctx->ubus_ctx = ubus_ctx = ubus_connect(NULL);
+	bbf_ctx->ubus_ctx = g_ubus_ctx = ubus_connect(NULL);
 }
 
 void dm_ubus_free(struct dmctx *bbf_ctx)
@@ -645,13 +715,15 @@ void dm_ubus_free(struct dmctx *bbf_ctx)
 
 	if (bbf_ctx->ubus_ctx) {
 		ubus_free(bbf_ctx->ubus_ctx);
-		bbf_ctx->ubus_ctx = ubus_ctx = NULL;
+		bbf_ctx->ubus_ctx = g_ubus_ctx = NULL;
 	}
 }
 
 void dm_ubus_cache_init(void)
 {
 	INIT_LIST_HEAD(&dm_ubus_cache);
+
+	dmubus_schedule_blacklisted_ubus_recovery();
 }
 
 void dm_ubus_cache_free(void)
@@ -660,6 +732,11 @@ void dm_ubus_cache_free(void)
 
 	list_for_each_entry_safe(entry, tmp, &dm_ubus_cache, list) {
 		list_del(&entry->list);
+		FREE(entry->obj);
+		FREE(entry->method);
+		FREE(entry->attr);
 		FREE(entry);
 	}
+
+	dmubus_stop_blacklisted_ubus_recovery();
 }
