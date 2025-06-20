@@ -600,6 +600,7 @@
       "version": "devel",
       "service_name": "netmode",
       "unified_daemon": false,
+      "dm_info_file": "netmode/files/datamodel.json",
       "post_install": [
         "sed 's/{BBF_VENDOR_PREFIX}/X_IOWRT_EU_/g' netmode/files/datamodel.json > /usr/share/bbfdm/micro_services/netmode.json",
         "sed 's/{BBF_VENDOR_PREFIX}/X_IOWRT_EU_/g' netmode/bbfdm_service.json > /etc/bbfdm/services/netmode.json"
