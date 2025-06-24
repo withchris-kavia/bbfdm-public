@@ -348,6 +348,9 @@ int bbfdm_set_handler(struct ubus_context *ctx, struct ubus_object *obj,
 
 	fill_optional_data(&data, tb[DM_SET_OPTIONAL]);
 
+	// Make sure to refresh references db before calling set method to ensure that all references are stored in the database
+	bbfdm_refresh_references(data.bbf_ctx.dm_type, obj->name);
+
 	BBF_INFO("ubus method|%s|, name|%s|, path(%s)", method, obj->name, path);
 
 	blob_buf_init(&data.bb, 0);
