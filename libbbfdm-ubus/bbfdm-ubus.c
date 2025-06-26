@@ -587,6 +587,10 @@ int bbfdm_del_handler(struct ubus_context *ctx, struct ubus_object *obj,
 	bbf_cleanup(&data.bbf_ctx);
 	free_path_list(&paths_list);
 
+	if (!fault) {
+		bbfdm_refresh_references(data.bbf_ctx.dm_type, obj->name);
+	}
+
 	ubus_send_reply(ctx, req, data.bb.head);
 	blob_buf_free(&data.bb);
 
