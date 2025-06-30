@@ -305,7 +305,7 @@ int bbfdm_get_reference_linker(struct dmctx *ctx, char *reference_path, struct d
 	int res = dmuci_get_option_value_string_varstate("bbfdm_reference_db", "reference_value", hash_str, &uci_val);
 
 	if (uci_val && uci_val[0] == '#' && uci_val[1] == '\0') {
-		reference_args->value = uci_val;
+		reference_args->value = dmstrdup("");
 		reference_args->is_valid_path = true;
 	} else {
 		reference_args->value = uci_val;
