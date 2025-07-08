@@ -86,6 +86,7 @@ def get_info_from_json(data, dm_json_files=None):
                 string=string + "."
 
         if len(string) != 0:
+            string = string.replace("X_IOWRT_EU_", "{BBF_VENDOR_PREFIX}").replace("X_GENEXIS_EU_", "{BBF_VENDOR_PREFIX}")
             list_data.append(string)
 
     if len(list_data) == 0:
@@ -103,6 +104,12 @@ def get_info_from_json(data, dm_json_files=None):
 
                 index = -1
                 for key in ob.keys():
+
+                    if key == "json_plugin_version":
+                        continue
+
+                    key = key.replace("X_IOWRT_EU_", "{BBF_VENDOR_PREFIX}").replace("X_GENEXIS_EU_", "{BBF_VENDOR_PREFIX}")
+
                     if key in list_data:
                         index = list_data.index(key)
                         break
