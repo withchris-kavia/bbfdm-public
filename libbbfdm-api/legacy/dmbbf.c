@@ -1952,35 +1952,13 @@ static void create_required_sections(struct dmctx *ctx)
 	ctx->addobj_instance = (void *)ref_s;
 }
 
-static int convert_path_with_star(const char *full_obj, char *out_str, size_t out_len)
-{
-	char str[1024] = {0};
-	char *pch, *pchr;
-	size_t pos = 0;
-
-	DM_STRNCPY(str, full_obj, sizeof(str));
-
-	for (pch = strtok_r(str, ".", &pchr); pch != NULL; pch = strtok_r(NULL, ".", &pchr)) {
-		const char *part = isdigit_str(pch) ? "*" : pch;
-		int written = snprintf(out_str + pos, out_len - pos, "%s.", part);
-		if (written < 0 || written >= (int)(out_len - pos)) {
-			return -1; // overflow
-		}
-		pos += written;
-	}
-
-	return 0;
-}
-
 static void set_references(struct uci_section *service_sec, const char *parent_path, const char *current_path, const char *key_name, const char *key_value, char *out_str, size_t out_len)
 {
 	struct uci_list *uci_list = NULL;
 	char linker[MAX_DM_PATH * 2] = {0};
 	char hash_str[9] = {0};
 
-	convert_path_with_star(parent_path, out_str, out_len);
-
-	snprintf(linker, sizeof(linker), "%s[%s==%s].", out_str, key_name, DM_STRLEN(key_value) ? key_value : "");
+	snprintf(linker, sizeof(linker), "%s[%s==%s].", parent_path, key_name, DM_STRLEN(key_value) ? key_value : "");
 	calculate_hash(linker, hash_str, sizeof(hash_str));
 	DM_STRNCPY(out_str, current_path, strlen(current_path));
 	dmuci_set_value_varstate("bbfdm_reference_db", "reference_path", hash_str, out_str);
