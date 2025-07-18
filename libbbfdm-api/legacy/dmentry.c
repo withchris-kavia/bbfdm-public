@@ -287,6 +287,7 @@ int adm_entry_get_reference_param(struct dmctx *ctx, char *param, char *linker, 
 	dmctx.inparam_isparam = 1;
 	dmctx.in_param = param;
 	dmctx.linker = linker;
+	dmctx.dm_type = ctx->dm_type;
 
 	dm_entry_get_reference_param(&dmctx);
 
@@ -310,6 +311,7 @@ int adm_entry_get_reference_value(struct dmctx *ctx, const char *param, char **v
 	bbf_ctx_init_sub(&dmctx, ctx->dm_entryobj);
 
 	dmctx.in_param = linker;
+	dmctx.dm_type = ctx->dm_type;
 
 	dm_entry_get_reference_value(&dmctx);
 
@@ -334,6 +336,7 @@ bool adm_entry_object_exists(struct dmctx *ctx, const char *param) // To be remo
 	blob_buf_init(&dmctx.bb, 0);
 
 	dmctx.in_param = linker;
+	dmctx.dm_type = ctx->dm_type;
 
 	dm_entry_object_exists(&dmctx);
 
