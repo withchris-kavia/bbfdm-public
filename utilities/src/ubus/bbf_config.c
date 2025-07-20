@@ -19,6 +19,113 @@
 
 #include "utils.h"
 
+/* ------------------------------------------------------------------ */
+/* DM-framework service transaction helpers                          */
+/* ------------------------------------------------------------------ */
+
+/* Timeout (ms) used for each service transaction call */
+#define DEFAULT_UBUS_TIMEOUT 5000
+#define SERVICE_TRANSACTION_TIMEOUT DEFAULT_UBUS_TIMEOUT
+
+struct trans_ctx {
+    struct ubus_context *ctx;
+    const char *cmd;   /* "commit" or "abort" */
+    const char *proto; /* proto from commit/revert input */
+};
+
+static void invoke_service_transaction(struct ubus_context *ctx, const char *service_name,
+                                       const char *cmd, const char *proto)
+{
+    if (!ctx || !service_name || !cmd)
+        return;
+
+    struct blob_buf bb = {0};
+
+    blob_buf_init(&bb, 0);
+    blobmsg_add_string(&bb, "cmd", cmd);
+
+    if (proto && strlen(proto)) {
+        void *tbl = blobmsg_open_table(&bb, "optional");
+        blobmsg_add_string(&bb, "proto", proto);
+        blobmsg_close_table(&bb, tbl);
+    }
+
+    if (bbf_config_call(ctx, service_name, "transaction", &bb, NULL, NULL)) {
+        ULOG_ERR("Failed '%s' transaction for service '%s'", cmd, service_name);
+    } else {
+        ULOG_INFO("Service '%s' transaction '%s' succeeded", service_name, cmd);
+    }
+
+    blob_buf_free(&bb);
+}
+
+/* Callback used when querying bbfdm 'services' */
+static void services_list_cb(struct ubus_request *req, int type __attribute__((unused)), struct blob_attr *msg)
+{
+    struct trans_ctx *tctx = (struct trans_ctx *)req->priv;
+    if (!tctx || !msg)
+        return;
+
+    /* Expecting { "registered_services": [ {...}, ... ] } */
+    struct blob_attr *rs_array = NULL;
+    struct blob_attr *cur;
+    int rem = blob_len(msg);
+
+    /* Find the array first */
+    blob_for_each_attr(cur, msg, rem) {
+        if (blobmsg_type(cur) == BLOBMSG_TYPE_ARRAY && strcmp(blobmsg_name(cur), "registered_services") == 0) {
+            rs_array = cur;
+            break;
+        }
+    }
+
+    if (!rs_array)
+        return;
+
+    const struct blobmsg_policy pol[] = {
+        { "name",  BLOBMSG_TYPE_STRING },
+        { "proto", BLOBMSG_TYPE_STRING },
+    };
+
+    struct blob_attr *entry;
+    blobmsg_for_each_attr(entry, rs_array, rem) {
+        struct blob_attr *tb[2] = {0};
+        blobmsg_parse(pol, 2, tb, blobmsg_data(entry), blobmsg_len(entry));
+
+        if (!tb[0])
+            continue;
+
+        const char *sname = blobmsg_get_string(tb[0]);
+        const char *proto = (tctx->proto) ? tctx->proto : "both";
+		ULOG_ERR("Invoking service transaction for service: %s, cmd: %s, proto: %s", sname, tctx->cmd, proto);
+        invoke_service_transaction(tctx->ctx, sname, tctx->cmd, proto);
+    }
+}
+
+static void trigger_dfm_service_transactions(struct ubus_context *ctx, const char *cmd, const char *proto)
+{
+    if (!ctx || !cmd)
+        return;
+
+    ULOG_ERR("Triggering dm-framework service transactions cmd: %s, proto: %s", cmd, proto);
+
+    struct blob_buf bb = {0};
+    blob_buf_init(&bb, 0);
+    blobmsg_add_u8(&bb, "dmf_only", true);
+
+    struct trans_ctx tctx = {
+        .ctx = ctx,
+        .cmd = cmd,
+        .proto = proto,
+    };
+
+    /* Query bbfdm -> services */
+    if (bbf_config_call(ctx, "bbfdm", "services", &bb, services_list_cb, &tctx)) {
+        ULOG_ERR("Failed to retrieve dm-framework services list from bbfdm");
+    }
+
+    blob_buf_free(&bb);
+}
 #define TIME_TO_WAIT_FOR_RELOAD 5
 #define MAX_PACKAGE_NUM 256
 #define MAX_SERVICE_NUM 16
@@ -703,6 +810,7 @@ static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_objec
 #endif
 	}
 
+	trigger_dfm_service_transactions(ctx, "commit", tb[SERVICES_PROTO] ? blobmsg_get_string(tb[SERVICES_PROTO]) : "both");
 	struct blob_attr *services = tb[SERVICES_NAME];
 
 	size_t arr_len = (services) ? blobmsg_len(services) : 0;
@@ -802,6 +910,8 @@ static int bbf_config_revert_handler(struct ubus_context *ctx, struct ubus_objec
 		ULOG_DEBUG("Protocol index determined as %d for protocol '%s'", idx, proto);
 	}
 
+	trigger_dfm_service_transactions(ctx, "abort", tb[SERVICES_PROTO] ? blobmsg_get_string(tb[SERVICES_PROTO]) : "both");
+
 	struct blob_attr *services = tb[SERVICES_NAME];
 
 	size_t arr_len = (services) ? blobmsg_len(services) : 0;
@@ -836,6 +946,36 @@ static void free_changed_uci_list(struct list_head *uci_list)
 		FREE(node->uci);
 		FREE(node);
 	}
+}
+
+static int bbf_config_changes_handler(struct ubus_context *ctx, struct ubus_object *obj __attribute__((unused)),
+		    struct ubus_request_data *req, const char *method __attribute__((unused)),
+		    struct blob_attr *msg)
+{
+	struct blob_attr *tb[__MAX];
+	struct blob_buf bb = {0};
+
+	ULOG_INFO("Changes handler called");
+
+	memset(&bb, 0, sizeof(struct blob_buf));
+	blob_buf_init(&bb, 0);
+
+	if (blobmsg_parse(bbf_config_policy, __MAX, tb, blob_data(msg), blob_len(msg))) {
+		blobmsg_add_string(&bb, "error", "Failed to parse blob");
+		goto end;
+	}
+
+	// Return empty array for now - uci_config_changes and update_critical_services not available in this codebase
+	void *array = blobmsg_open_array(&bb, "configs");
+	blobmsg_close_array(&bb, array);
+
+end:
+	ubus_send_reply(ctx, req, bb.head);
+	blob_buf_free(&bb);
+
+	ULOG_INFO("Changes handler exit");
+
+	return 0;
 }
 
 static void receive_notify_event(struct ubus_context *ctx, struct ubus_event_handler *ev,
@@ -880,6 +1020,7 @@ static void receive_notify_event(struct ubus_context *ctx, struct ubus_event_han
 static const struct ubus_method bbf_config_methods[] = {
 	UBUS_METHOD("commit", bbf_config_commit_handler, bbf_config_policy),
 	UBUS_METHOD("revert", bbf_config_revert_handler, bbf_config_policy),
+	UBUS_METHOD("changes", bbf_config_changes_handler, bbf_config_policy),
 };
 
 static struct ubus_object_type bbf_config_object_type = UBUS_OBJECT_TYPE("bbf.config", bbf_config_methods);

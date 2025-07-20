@@ -25,6 +25,19 @@
 #include "get.h"
 #include "cli.h"
 
+/* Policy for services method (optional filter by service name and framework flag) */
+enum services_attr {
+	SERVICES_NAME,
+	SERVICES_FRAMEWORK_ONLY,
+	__SERVICES_MAX
+};
+
+static const struct blobmsg_policy services_policy[] = {
+	[SERVICES_NAME]           = { .name = "name",              .type = BLOBMSG_TYPE_STRING },
+	[SERVICES_FRAMEWORK_ONLY] = { .name = "dmf_only",          .type = BLOBMSG_TYPE_BOOL   },
+};
+
+
 struct ubus_context g_ubus_ctx = {0};
 
 extern struct list_head registered_services;
@@ -367,16 +380,31 @@ static int bbfdm_handler_sync(struct ubus_context *ctx, struct ubus_object *obj,
 }
 
 static int bbfdm_services_handler(struct ubus_context *ctx, struct ubus_object *obj,
-			    struct ubus_request_data *req, const char *method, struct blob_attr *msg __attribute__((unused)))
+				struct ubus_request_data *req, const char *method, struct blob_attr *msg __attribute__((unused)))
 {
-	struct blob_buf bb;
+	struct blob_attr *tb[__SERVICES_MAX] = {0};
+	struct blob_buf bb = {0};
+
+	if (msg)
+		blobmsg_parse(services_policy, __SERVICES_MAX, tb, blob_data(msg), blob_len(msg));
+
+	const char *filter_name = NULL;
+	if (tb[SERVICES_NAME])
+		filter_name = blobmsg_get_string(tb[SERVICES_NAME]);
+
+	bool framework_only = false;
+	if (tb[SERVICES_FRAMEWORK_ONLY])
+		framework_only = blobmsg_get_bool(tb[SERVICES_FRAMEWORK_ONLY]);
+
+	BBFDM_INFO("ubus method|%s|, name|%s|, filter|%s|, framework_only|%d|", method, obj->name, filter_name ? filter_name : "", framework_only);
+
 
 	BBFDM_INFO("ubus method|%s|, name|%s|", method, obj->name);
 
 	memset(&bb, 0, sizeof(struct blob_buf));
 	blob_buf_init(&bb, 0);
 
-	list_registered_services(&bb);
+	list_registered_services(&bb, filter_name, framework_only);
 
 	ubus_send_reply(ctx, req, bb.head);
 	blob_buf_free(&bb);
@@ -392,7 +420,7 @@ static struct ubus_method bbfdm_methods[] = {
 	UBUS_METHOD("set", bbfdm_handler_sync, bbfdm_policy),
 	UBUS_METHOD("add", bbfdm_handler_sync, bbfdm_policy),
 	UBUS_METHOD("del", bbfdm_handler_sync, bbfdm_policy),
-	UBUS_METHOD_NOARG("services", bbfdm_services_handler)
+	UBUS_METHOD("services", bbfdm_services_handler, services_policy)
 };
 
 static struct ubus_object_type bbfdm_object_type = UBUS_OBJECT_TYPE(BBFDM_UBUS_OBJECT, bbfdm_methods);
