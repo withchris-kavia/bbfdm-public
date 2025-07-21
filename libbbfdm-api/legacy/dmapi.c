@@ -222,6 +222,163 @@ int bbf_set_alias(struct dmctx *ctx, struct uci_section *s, const char *option_n
 	return 0;
 }
 
+/**
+ * @brief Safely read a JSON object from a file with shared locking.
+ *
+ * This function opens a JSON file and reads its contents into memory
+ * using a shared lock (`flock` with `LOCK_SH`) to prevent concurrent
+ * writes during the read operation. It replaces the use of
+ * `json_object_from_file()` from json-c in scenarios where the file
+ * may be modified by other processes.
+ *
+ * Key behavior:
+ * - Acquires a shared lock (`LOCK_SH`) to ensure the file isn't being
+ *   modified by a writer holding an exclusive lock (`LOCK_EX`).
+ * - Reads the entire file into a buffer and parses it using
+ *   `json_tokener_parse()`.
+ * - Ensures memory safety and proper resource cleanup.
+ *
+ * @param file_path Path to the JSON file to read.
+ * @return Pointer to the parsed `json_object`, or NULL on failure.
+ *
+ * @note All writers must acquire an exclusive lock (`LOCK_EX`) before
+ * modifying the file to ensure this function reads consistent data.
+ * Readers that bypass locking (e.g., using `json_object_from_file()`)
+ * risk reading partial or corrupt data.
+ */
+
+static struct json_object *bbfdm_json_object_from_file(const char *file_path)
+{
+	int fd = open(file_path, O_RDONLY);
+	if (fd < 0) {
+		BBF_DEBUG("Cannot open file: %s", file_path);
+		return NULL;
+	}
+
+	// Acquire shared lock
+	if (flock(fd, LOCK_SH) < 0) {
+		BBF_ERR("Failed to acquire shared lock on: %s", file_path);
+		close(fd);
+		return NULL;
+	}
+
+	// Read file into buffer
+	off_t len = lseek(fd, 0, SEEK_END);
+	if (len == -1 || lseek(fd, 0, SEEK_SET) == -1) {
+		BBF_ERR("Failed to seek in file: %s", file_path);
+		close(fd);
+		return NULL;
+	}
+
+	char *buffer = malloc(len + 1);
+	if (!buffer) {
+		close(fd);
+		return NULL;
+	}
+
+	if (read(fd, buffer, len) != len) {
+		BBF_ERR("Failed to read file: %s", file_path);
+		free(buffer);
+		close(fd);
+		return NULL;
+	}
+
+	buffer[len] = '\0'; // null-terminate
+
+	json_object *jobj = json_tokener_parse(buffer);
+
+	free(buffer);
+	close(fd); // releases lock
+
+	return jobj;
+}
+
+static char *join_path(const char *prefix, const char *key)
+{
+	size_t len = strlen(prefix) + strlen(key) + 2; // +1 for dot, +1 for null
+
+	char *buf = dmmalloc(len);
+	snprintf(buf, len, "%s%s.", prefix, key);
+	return buf;
+}
+
+static char *find_path_recursive(json_object *curr, char **parts, int index, int total, const char *target_value, const char *current_path)
+{
+	if (index >= total || curr == NULL)
+		return NULL;
+
+	const char *part = parts[index];
+
+	if (strcmp(part, "*") == 0) {
+		json_object_object_foreach(curr, key, val) {
+			if (!key || json_object_get_type(val) != json_type_object)
+				continue;
+
+			char *new_path = join_path(current_path, key);
+			char *res = find_path_recursive(val, parts, index + 1, total, target_value, new_path);
+			dmfree(new_path);
+
+			if (res)
+				return res;
+		}
+	} else {
+		json_object *next = NULL;
+
+		if (!json_object_object_get_ex(curr, part, &next))
+			return NULL;
+
+		if (index == total - 1) {
+			if (json_object_get_type(next) == json_type_string &&
+					strcmp(json_object_get_string(next), target_value) == 0) {
+				char *reference_path = dmstrdup(current_path);
+				int len = DM_STRLEN(reference_path);
+
+				if (len > 0 && reference_path[len - 1] == '.')
+					reference_path[len - 1] = 0;
+
+				return reference_path;
+			}
+		} else if (json_object_get_type(next) == json_type_object) {
+			char *new_path = join_path(current_path, part);
+			char *res = find_path_recursive(next, parts, index + 1, total, target_value, new_path);
+			dmfree(new_path);
+
+			if (res)
+				return res;
+		}
+	}
+
+	return NULL;
+}
+
+char *bbfdm_resolve_external_reference(struct dmctx *ctx, const char *linker_path, const char *linker_value)
+{
+	char file_path[256] = {0};
+	char *reference_path = NULL;
+	size_t count = 0;
+
+	if (!ctx || DM_STRLEN(linker_path) == 0 || !linker_value)
+		return NULL;
+
+	char **parts = strsplit(linker_path, ".", &count);
+	if (count < 2)
+		return NULL;
+
+	snprintf(file_path, sizeof(file_path), "%s/%s.json", DATA_MODEL_DB_PATH, parts[1]);
+	if (strlen(file_path) == 0)
+		return NULL;
+
+	json_object *root = bbfdm_json_object_from_file(file_path);
+	if (!root)
+		return NULL;
+
+	reference_path = find_path_recursive(root, parts, 0, count, linker_value, "");
+
+	json_object_put(root);
+
+	return reference_path;
+}
+
 int bbfdm_get_references(struct dmctx *ctx, int match_action, const char *base_path, const char *key_name, char *key_value, char *out, size_t out_len)
 {
 	char param_path[1024] = {0};
@@ -247,11 +404,14 @@ int bbfdm_get_references(struct dmctx *ctx, int match_action, const char *base_p
 		return -1;
 	}
 
+	size_t len = strlen(out);
+
+	if (match_action == MATCH_FIRST && len > 0) // Reference path is already resolved
+		return 0;
+
 	snprintf(param_path, sizeof(param_path), "%s*.%s", base_path, key_name);
 
 	adm_entry_get_reference_param(ctx, param_path, key_value, &value);
-
-	size_t len = strlen(out);
 
 	if (DM_STRLEN(value) != 0) {
 
@@ -260,20 +420,23 @@ int bbfdm_get_references(struct dmctx *ctx, int match_action, const char *base_p
 			return -1;
 		}
 
-		snprintf(&out[len], out_len - len, "%s%s", len ? (match_action == MATCH_FIRST ? "," : ";") : "", value);
+		snprintf(&out[len], out_len - len, "%s%s", (len > 0) ? "," : "", value);
 		return 0;
 	}
 
-	if (out_len - len < strlen(base_path) + strlen(key_name) + strlen(key_value) + 7) { // 7 = 'path[key_name=="key_value"].'
-		BBF_ERR("Buffer overflow detected. The output buffer is not large enough to hold the additional data!!!");
-		return -1;
+	char *external_reference = bbfdm_resolve_external_reference(ctx, param_path, key_value);
+	if (external_reference != NULL) {
+
+		if (out_len - len < strlen(external_reference)) {
+			BBF_ERR("Buffer overflow detected. The output buffer is not large enough to hold the additional data!!!");
+			return -1;
+		}
+
+		snprintf(&out[len], out_len - len, "%s%s", (len > 0) ? "," : "", external_reference);
+		return 0;
 	}
 
-	snprintf(param_path, sizeof(param_path), "%s[%s==%s].", base_path, key_name, key_value);
-
-	snprintf(&out[len], out_len - len, "%s%s", len ? (match_action == MATCH_FIRST ? "," : ";") : "", param_path);
-
-	return 0;
+	return -1;
 }
 
 int _bbfdm_get_references(struct dmctx *ctx, const char *base_path, const char *key_name, char *key_value, char **value)
@@ -284,13 +447,36 @@ int _bbfdm_get_references(struct dmctx *ctx, const char *base_path, const char *
 
 	*value = (!res) ? dmstrdup(buf): "";
 
-	return 0;
+	return res;
+}
+
+static json_object *get_node(json_object *root, const char *path)
+{
+	size_t count = 0;
+
+	if (!root || !path)
+		return NULL;
+
+	char **parts = strsplit(path, ".", &count);
+
+	if (count == 0)
+		return NULL;
+
+	json_object *curr = root;
+	for (int i = 0; i < count; i++) {
+		if (!json_object_object_get_ex(curr, parts[i], &curr)) {
+			curr = NULL;
+			break;
+		}
+	}
+
+	return curr;
 }
 
 int bbfdm_get_reference_linker(struct dmctx *ctx, char *reference_path, struct dm_reference *reference_args)
 {
-	char hash_str[9] = {0};
-	char *uci_val = NULL;
+	char file_path[256] = {0};
+	size_t count = 0;
 
 	if (!reference_path || !reference_args)
 		return -1;
@@ -300,22 +486,44 @@ int bbfdm_get_reference_linker(struct dmctx *ctx, char *reference_path, struct d
 	if (DM_STRLEN(reference_args->path) == 0)
 		return 0;
 
-	calculate_hash(reference_path, hash_str, sizeof(hash_str));
+	char **parts = strsplit(reference_path, ".", &count);
+	if (count < 2)
+		return -1;
 
-	int res = dmuci_get_option_value_string_varstate("bbfdm_reference_db", "reference_value", hash_str, &uci_val);
+	snprintf(file_path, sizeof(file_path), "%s/%s.json", DATA_MODEL_DB_PATH, parts[1]);
+	if (strlen(file_path) == 0)
+		return -1;
 
-	if (uci_val && uci_val[0] == '#' && uci_val[1] == '\0') {
+	json_object *root = bbfdm_json_object_from_file(file_path);
+	if (!root)
+		return -1;
+
+	json_object *node_obj = get_node(root, reference_path);
+	if (node_obj == NULL) {
 		reference_args->value = dmstrdup("");
-		reference_args->is_valid_path = true;
+		reference_args->is_valid_path = false;
 	} else {
-		reference_args->value = uci_val;
-		reference_args->is_valid_path = (res == 0) ? true : false;
+		char *value = NULL;
+
+		json_object_object_foreach(node_obj, key, val) {
+			(void)key; // Suppress unused variable warning
+
+			if (json_object_get_type(val) != json_type_string)
+				continue;
+
+			value = dmstrdup(json_object_get_string(val));
+			break;
+		}
+
+		reference_args->value = dmstrdup(value ? value : "");
+		reference_args->is_valid_path = true;
 	}
 
+	json_object_put(root);
 	return 0;
 }
 
-int bbfdm_operate_reference_linker(struct dmctx *ctx, const char *reference_path, char **reference_value)
+int bbfdm_operate_reference_linker(struct dmctx *ctx, const char *reference_path, char **reference_value) //TO be removed
 {
 	if (!ctx) {
 		BBF_ERR("%s: ctx should not be null", __func__);

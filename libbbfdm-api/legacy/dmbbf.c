@@ -891,57 +891,6 @@ static char *get_default_value_by_type(const char *param_name, int type)
 	}
 }
 
-static bool is_same_reference_path(const char *curr_value, const char *in_value)
-{
-	char *pch = NULL, *pchr = NULL;
-	char resolved_path[2048] = {0};
-	char buf[2048] = {0};
-	unsigned pos = 0;
-
-	if (!curr_value || !in_value)
-		return false;
-
-	if (strcmp(curr_value, in_value) == 0)
-		return true;
-
-	DM_STRNCPY(buf, curr_value, sizeof(buf));
-
-	char *is_list = strchr(buf, ';');
-
-	for (pch = strtok_r(buf, is_list ? ";" : ",", &pchr);
-			pch != NULL;
-			pch = strtok_r(NULL, is_list ? ";" : ",", &pchr)) {
-
-		char *p = strchr(pch, '[');
-		if (p) {
-			char hash_str[9] = {0};
-			char *uci_val = NULL;
-
-			calculate_hash(pch, hash_str, sizeof(hash_str));
-
-			dmuci_get_option_value_string_varstate("bbfdm_reference_db", "reference_path", hash_str, &uci_val);
-
-			if (DM_STRLEN(uci_val)) {
-				pos += snprintf(&resolved_path[pos], sizeof(resolved_path) - pos, "%s,", uci_val);
-			}
-		} else {
-			pos += snprintf(&resolved_path[pos], sizeof(resolved_path) - pos, "%s,", pch);
-		}
-
-		if (pos != 0 && is_list == false)
-			break;
-	}
-
-	if (pos > 0) {
-		resolved_path[pos - 1] = 0; // Remove trailing comma
-	}
-
-	if (strcmp(resolved_path, in_value) == 0)
-		return true;
-
-	return false;
-}
-
 /* **********
  * get value 
  * **********/
@@ -1598,11 +1547,6 @@ static int mparam_set_value(DMPARAM_ARGS)
 			BBF_DEBUG("Requested value (%s) is same as current value (%s).", dmctx->in_value, value);
 			return 0;
 		}
-	} else if (leaf->dm_flags & DM_FLAG_REFERENCE) {
-		if (is_same_reference_path(value, dmctx->in_value)) {
-			BBF_DEBUG("Requested value (%s) is same as current value (%s)..", dmctx->in_value, value);
-			return 0;
-		}
 	} else {
 		if (DM_STRCMP(dmctx->in_value, value) == 0) {
 			BBF_DEBUG("Requested value (%s) is same as current value (%s)...", dmctx->in_value, value);
@@ -1903,103 +1847,238 @@ int dm_entry_event(struct dmctx *dmctx)
 /* **********
  * get instances data base
  * **********/
-static void create_required_sections(struct dmctx *ctx)
+typedef struct db_entry {
+    struct list_head list;
+    json_object *json_obj;
+	char obj_name[32];
+} db_entry_t;
+
+struct retry_context {
+	json_object *json_obj;
+	struct uloop_timeout retry_timer;
+	char file_path[128];
+};
+
+static json_object *find_db_json_obj(struct list_head *registered_db, const char *obj_name)
 {
-	struct uci_section *ref_s = NULL;
+	db_entry_t *db_obj = NULL;
 
-	ref_s = dmuci_get_section_varstate("bbfdm_reference_db", "reference_path");
-	if (ref_s == NULL) {
-		dmuci_add_section_varstate("bbfdm_reference_db", "reference_path", &ref_s);
-		dmuci_rename_section_by_section(ref_s, "reference_path");
+	if (list_empty(registered_db))
+		return NULL;
+
+	list_for_each_entry(db_obj, registered_db, list) {
+		if (DM_STRCMP(db_obj->obj_name, obj_name) == 0)
+			return db_obj->json_obj;
 	}
 
-	ref_s = dmuci_get_section_varstate("bbfdm_reference_db", "reference_value");
-	if (ref_s == NULL) {
-		dmuci_add_section_varstate("bbfdm_reference_db", "reference_value", &ref_s);
-		dmuci_rename_section_by_section(ref_s, "reference_value");
-	}
-
-	ref_s = dmuci_get_section_varstate("bbfdm_reference_db", ctx->in_value);
-	if (ref_s == NULL) {
-		dmuci_add_section_varstate("bbfdm_reference_db", "service", &ref_s);
-		dmuci_rename_section_by_section(ref_s, ctx->in_value);
-	} else {
-		struct uci_list *uci_list = NULL;
-		struct uci_element *e = NULL;
-
-		dmuci_get_value_by_section_list(ref_s, "reference_path", &uci_list);
-		if (uci_list != NULL) {
-
-			uci_foreach_element(uci_list, e) {
-				dmuci_set_value_varstate("bbfdm_reference_db", "reference_path", e->name, "");
-			}
-
-			dmuci_set_value_by_section_varstate(ref_s, "reference_path", "");
-		}
-
-		dmuci_get_value_by_section_list(ref_s, "reference_value", &uci_list);
-		if (uci_list != NULL) {
-
-			uci_foreach_element(uci_list, e) {
-				dmuci_set_value_varstate("bbfdm_reference_db", "reference_value", e->name, "");
-			}
-
-			dmuci_set_value_by_section_varstate(ref_s, "reference_value", "");
-		}
-	}
-
-	// This argument is used as internal variable to pass service uci section
-	ctx->addobj_instance = (void *)ref_s;
+	return NULL;
 }
 
-static int convert_path_with_star(const char *full_obj, char *out_str, size_t out_len)
+static json_object *register_new_db_json_obj(struct list_head *registered_db, const char *obj_name)
 {
-	char str[1024] = {0};
-	char *pch, *pchr;
-	size_t pos = 0;
+	db_entry_t *db_obj = NULL;
 
-	DM_STRNCPY(str, full_obj, sizeof(str));
+	if (!obj_name) {
+		BBF_ERR("Invalid object name");
+		return NULL;
+	}
 
-	for (pch = strtok_r(str, ".", &pchr); pch != NULL; pch = strtok_r(NULL, ".", &pchr)) {
-		const char *part = isdigit_str(pch) ? "*" : pch;
-		int written = snprintf(out_str + pos, out_len - pos, "%s.", part);
-		if (written < 0 || written >= (int)(out_len - pos)) {
-			return -1; // overflow
-		}
-		pos += written;
+	db_obj = (db_entry_t *)calloc(1, sizeof(db_entry_t));
+	if (!db_obj) {
+		BBF_ERR("Failed to allocate memory");
+		return NULL;
+	}
+
+	list_add_tail(&db_obj->list, registered_db);
+
+	db_obj->json_obj = json_object_new_object();
+	DM_STRNCPY(db_obj->obj_name, obj_name, sizeof(db_obj->obj_name));
+
+	return db_obj->json_obj;
+}
+
+/**
+ * @brief Write a JSON object to a file safely using exclusive locking.
+ *
+ * This function serializes the given `json_object` to the specified file path
+ * using json-c's pretty formatting. It ensures safe concurrent access by
+ * acquiring an exclusive file lock (`LOCK_EX`) before writing, preventing
+ * other processes from reading or writing the file during the operation.
+ *
+ * Key behavior:
+ * - Opens the file for writing (creates it if it does not exist).
+ * - Acquires an exclusive lock (`LOCK_EX`) using `flock()` to ensure
+ *   no other process reads or writes during the write.
+ * - Serializes the JSON object using json-c with pretty formatting.
+ * - Ensures that any readers using shared locks (`LOCK_SH`) are blocked
+ *   during the write to avoid partial or inconsistent reads.
+ * - Writes the data to the file stream (`FILE*`) derived from the file
+ *   descriptor.
+ * - Automatically flushes and closes the file, releasing the lock.
+ *
+ * @param file_path Full path to the JSON file to write.
+ * @param json_obj Pointer to the `json_object` to serialize and store.
+ * @return 0 on success, -1 on failure (file open, locking, or writing error).
+ *
+ * @note Any readers accessing this file should use `flock()` with `LOCK_SH`
+ *       to avoid reading partial or inconsistent data while a write is in
+ *       progress.
+ */
+static int bbfdm_json_object_to_file(const char *file_path, json_object *json_obj)
+{
+	// Open file for writing (create if it doesn't exist, truncate if it does)
+	int fd = open(file_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (fd == -1) {
+		BBF_ERR("Failed to open file for writing: %s", file_path);
+		return -1;
+	}
+
+	// Acquire exclusive lock to prevent simultaneous writes
+	if (flock(fd, LOCK_EX) == -1) {
+		BBF_ERR("Failed to lock file: %s", file_path);
+		close(fd);
+		return -1;
+	}
+
+	// Associate a FILE* stream with the file descriptor
+	FILE *fp = fdopen(fd, "w");
+	if (!fp) {
+		BBF_ERR("fdopen failed on file: %s", file_path);
+		close(fd); // Releases the lock as well
+		return -1;
+	}
+
+	// Serialize JSON object to string
+	const char *json_str = json_object_to_json_string_ext(json_obj, JSON_C_TO_STRING_PRETTY);
+	if (!json_str) {
+		BBF_ERR("Failed to serialize JSON object");
+		fclose(fp); // Closes fd and releases lock
+		return -1;
+	}
+
+	// Write JSON string to file
+	if (fprintf(fp, "%s\n", json_str) < 0) {
+		BBF_ERR("Failed to write JSON to file: %s", file_path);
+		fclose(fp); // Closes fd and releases lock
+		return -1;
+	}
+
+	// Flush FILE* buffer and sync file descriptor to disk
+	if (fflush(fp) != 0 || fsync(fd) != 0) {
+		BBF_ERR("Failed to flush/sync JSON file: %s", file_path);
+		fclose(fp); // Closes fd and releases lock
+		return -1;
+	}
+
+	// Close stream (also closes file descriptor and releases lock)
+	if (fclose(fp) != 0) {
+		BBF_ERR("Failed to close file: %s", file_path);
+		return -1;
 	}
 
 	return 0;
 }
 
-static void set_references(struct uci_section *service_sec, const char *parent_path, const char *current_path, const char *key_name, const char *key_value, char *out_str, size_t out_len)
+static void retry_write_cb(struct uloop_timeout *t)
 {
-	struct uci_list *uci_list = NULL;
-	char linker[MAX_DM_PATH * 2] = {0};
-	char hash_str[9] = {0};
+	struct retry_context *ctx = container_of(t, struct retry_context, retry_timer);
 
-	convert_path_with_star(parent_path, out_str, out_len);
+	if (!ctx || !ctx->json_obj)
+		return;
 
-	snprintf(linker, sizeof(linker), "%s[%s==%s].", out_str, key_name, DM_STRLEN(key_value) ? key_value : "");
-	calculate_hash(linker, hash_str, sizeof(hash_str));
-	DM_STRNCPY(out_str, current_path, strlen(current_path));
-	dmuci_set_value_varstate("bbfdm_reference_db", "reference_path", hash_str, out_str);
+	int ret = bbfdm_json_object_to_file(ctx->file_path, ctx->json_obj);
 
-	dmuci_get_value_by_section_list(service_sec, "reference_path", &uci_list);
-	if (!value_exists_in_uci_list(uci_list, hash_str))
-		dmuci_add_list_value_varstate("bbfdm_reference_db", section_name(service_sec), "reference_path", hash_str);
+	if (ret == 0) {
+		BBF_INFO("Retry write succeeded: %s", ctx->file_path);
+	} else {
+		BBF_ERR("Retry write failed: %s", ctx->file_path);
+	}
 
-	calculate_hash(out_str, hash_str, sizeof(hash_str));
-	dmuci_set_value_varstate("bbfdm_reference_db", "reference_value", hash_str, DM_STRLEN(key_value) ? key_value : "#");
+	json_object_put(ctx->json_obj);
+	dmfree(ctx);
+}
 
-	dmuci_get_value_by_section_list(service_sec, "reference_value", &uci_list);
-	if (!value_exists_in_uci_list(uci_list, hash_str))
-		dmuci_add_list_value_varstate("bbfdm_reference_db", section_name(service_sec), "reference_value", hash_str);
+static void write_unregister_db_json_objs(struct list_head *registered_db)
+{
+	db_entry_t *db_obj = NULL, *tmp = NULL;
+
+	list_for_each_entry_safe(db_obj, tmp, registered_db, list) {
+
+		if (db_obj->json_obj) {
+			char file_path[128] = {0};
+
+			snprintf(file_path, sizeof(file_path), "%s/%s.json", DATA_MODEL_DB_PATH, db_obj->obj_name);
+
+			int ret = bbfdm_json_object_to_file(file_path, db_obj->json_obj);
+
+			if (ret != 0) {
+				struct retry_context *ctx = dmcalloc(1, sizeof(struct retry_context));
+				if (!ctx) {
+					BBF_ERR("Failed to allocate retry context");
+					json_object_put(db_obj->json_obj);
+					goto cleanup;
+				}
+
+				BBF_ERR("Initial write to file failed: (%s). Scheduling retry in 500ms.", file_path);
+
+				DM_STRNCPY(ctx->file_path, file_path, sizeof(ctx->file_path));
+				ctx->json_obj = db_obj->json_obj;
+
+				ctx->retry_timer.cb = retry_write_cb;
+				uloop_timeout_set(&ctx->retry_timer, 500); // Retry after 500ms
+
+			} else {
+				json_object_put(db_obj->json_obj);
+			}
+		}
+
+	cleanup:
+		list_del(&db_obj->list);
+		FREE(db_obj);
+	}
 }
 
 static int mobj_get_references_db(DMOBJECT_ARGS)
 {
 	return 0;
+}
+
+static void add_path(struct list_head *registered_db, const char *path, const char *value)
+{
+	size_t count = 0;
+
+	if (!path || !value)
+		return;
+
+	char **parts = strsplit(path, ".", &count);
+
+	if (count < 2)
+		return;
+
+	// Path should be like: Device.X.Y.Z, so file name should use the second level which is X.json
+	json_object *curr = find_db_json_obj(registered_db, parts[1]);
+	if (curr == NULL) {
+		curr = register_new_db_json_obj(registered_db, parts[1]);
+	}
+
+	if (curr == NULL)
+		return;
+
+	for (int i = 0; i < count; i++) {
+		const char *key = parts[i];
+
+		if (i == count - 1) {
+			json_object_object_add(curr, key, json_object_new_string(value));
+		} else {
+			json_object *next = NULL;
+
+			if (!json_object_object_get_ex(curr, key, &next)) {
+				next = json_object_new_object();
+				json_object_object_add(curr, key, next);
+			}
+			curr = next;
+		}
+	}
 }
 
 static int mparam_get_references_db(DMPARAM_ARGS)
@@ -2015,7 +2094,7 @@ static int mparam_get_references_db(DMPARAM_ARGS)
 
 		(leaf->getvalue)(full_param, dmctx, data, instance, &value);
 
-		set_references((void *)dmctx->addobj_instance, node->parent->current_object, node->current_object, leaf->parameter, value, full_param, sizeof(full_param));
+		add_path((struct list_head *)dmctx->addobj_instance, full_param, value);
 	}
 
 	return 0;
@@ -2025,9 +2104,8 @@ int dm_entry_references_db(struct dmctx *ctx)
 {
 	DMOBJ *root = ctx->dm_entryobj;
 	DMNODE node = {.current_object = ""};
+	LIST_HEAD(registered_db);
 	int err = 0;
-
-	create_required_sections(ctx);
 
 	ctx->inparam_isparam = 0;
 	ctx->findparam = 1;
@@ -2036,8 +2114,11 @@ int dm_entry_references_db(struct dmctx *ctx)
 	ctx->checkleaf = NULL;
 	ctx->method_obj = mobj_get_references_db;
 	ctx->method_param = mparam_get_references_db;
+	ctx->addobj_instance = (void *)&registered_db; // This argument is used as internal variable to pass the address of registred DB list
 
 	err = dm_browse(ctx, &node, root, NULL, NULL);
+
+	write_unregister_db_json_objs(&registered_db);
 
 	return (ctx->findparam == 0) ? err : 0;
 }

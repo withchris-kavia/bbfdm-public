@@ -19,18 +19,11 @@ enum {
 	__BBFDM_MAX
 };
 
-struct linker_args {
-	struct list_head list;
-	char *path;
-	char *value;
-};
-
 struct async_request_context {
 	struct ubus_context *ubus_ctx;
-	struct uci_context *uci_ctx;
 	struct ubus_request_data request_data;
-	struct list_head linker_list;
 	struct blob_buf tmp_bb;
+	void *array;
 	bool service_list_processed;
 	bool path_matched;
 	bool raw_format;

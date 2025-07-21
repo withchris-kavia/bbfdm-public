@@ -297,6 +297,8 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 	memset(&context->tmp_bb, 0, sizeof(struct blob_buf));
 	blob_buf_init(&context->tmp_bb, 0);
 
+	context->array = blobmsg_open_array(&context->tmp_bb, "results");
+
 	ubus_defer_request(ctx, req, &context->request_data);
 
 	list_for_each_entry(service, &registered_services, list) {

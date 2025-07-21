@@ -27,6 +27,18 @@ extern "C" {
 bool bbfdm_folder_exists(const char *path);
 
 /**
+ * @brief Ensure that a folder exists at the given path.
+ *
+ * This function checks whether a folder exists at the specified path. If it does not,
+ * the function attempts to create it. If the folder already exists or is successfully
+ * created, the function returns true.
+ *
+ * @param[in] path Path to the folder.
+ * @return true if the folder exists or is successfully created, false otherwise.
+ */
+bool bbfdm_ensure_folder_exists(const char *path);
+
+/**
  * @brief Check if a file exists at the given path.
  *
  * This function verifies the existence of a file at the specified path.
