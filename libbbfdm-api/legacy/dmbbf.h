@@ -29,7 +29,11 @@
 
 int get_number_of_entries(struct dmctx *ctx, void *data, char *instance, int (*browseinstobj)(struct dmctx *ctx, struct dmnode *node, void *data, char *instance));
 char *handle_instance(struct dmctx *dmctx, DMNODE *parent_node, struct uci_section *s, const char *inst_opt, const char *alias_opt);
+char *uci_handle_instance(struct dmctx *dmctx, DMNODE *parent_node, struct dm_data *data);
+
 char *handle_instance_without_section(struct dmctx *dmctx, DMNODE *parent_node, int inst_nbr);
+int uci_handle_add(struct dmctx *dmctx, const char *refparam, const char *instance, struct dm_data *data,
+		const char *config_name, const char *sec_name, const char *sec_name_value);
 int get_empty(char *refparam, struct dmctx *ctx, void *data, char *instance, char **value);
 
 void fill_blob_param(struct blob_buf *bb, const char *path, const char *data, const char *type, uint32_t dm_flags);

@@ -16,5 +16,7 @@
 extern DMOBJ tSchedulesObj[];
 extern DMLEAF tSchedulesParams[];
 extern DMLEAF tScheduleParams[];
+
+extern DMLEAF tScheduleTestParams[];
 #endif
 

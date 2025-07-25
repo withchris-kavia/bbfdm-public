@@ -207,6 +207,7 @@ struct dmctx {
 	struct ubus_context *ubus_ctx;
 	struct list_head *memhead;
 
+	char *obj_buf[16];
 	char *inst_buf[16];
 	char fault_msg[256];
 };
@@ -215,6 +216,7 @@ typedef struct dmnode {
 	DMOBJ *obj;
 	struct dmnode *parent;
 	char *current_object;
+	char *current_object_file;
 	void *prev_data;
 	char *prev_instance;
 	unsigned char instance_level;

@@ -138,31 +138,57 @@ static char *get_status(char *start, char *period, char *day)
 **************************************************************/
 static int addSchedule(char *refparam, struct dmctx *ctx, void *data, char **instance)
 {
-	struct uci_section *s = NULL, *dmmap_s = NULL;
-	char s_name[16] = {0};
-	int i;
+	struct dm_data curr_data = {0};
+	char sec_name[16] = {0};
 
-	snprintf(s_name, sizeof(s_name), "schedule_%s", *instance);
+	snprintf(sec_name, sizeof(sec_name), "schedule_%s", *instance);
 
-	dmuci_add_section("schedules", "schedule", &s);
-	dmuci_rename_section_by_section(s, s_name);
+	uci_handle_add(ctx, refparam, *instance, &curr_data, "schedules", "schedule", sec_name);
 
-	dmuci_set_value_by_section(s, "enable", "0");
-	
-	for (i = 0; allowed_days[i] != NULL; i++) {
-		dmuci_add_list_value_by_section(s, "day", allowed_days[i]);
-	}
+	// Default config option
+	dmuci_set_value_by_section(curr_data.config_section, "enable", "0");
+	dmuci_set_value_by_section(curr_data.config_section, "duration", "1");
 
-	dmuci_set_value_by_section(s, "duration", "1");
+	for (int i = 0; allowed_days[i] != NULL; i++)
+		dmuci_add_list_value_by_section(curr_data.config_section, "day", allowed_days[i]);
 
-	dmuci_add_section_bbfdm("dmmap_schedules", "schedule", &dmmap_s);
-	dmuci_set_value_by_section(dmmap_s, "section_name", s_name);
-	dmuci_set_value_by_section(dmmap_s, "schedule_instance", *instance);
-	dmuci_set_value_by_section(dmmap_s, "schedule_alias", s_name);
+	// Default dmmap option
+	dmuci_set_value_by_section(curr_data.dmmap_section, "Alias", sec_name);
+
 	return 0;
 }
 
 static int delSchedule(char *refparam, struct dmctx *ctx, void *data, char *instance, unsigned char del_action)
+{
+	dmuci_delete_by_section(((struct dm_data *)data)->config_section, NULL, NULL);
+	dmuci_delete_by_section(((struct dm_data *)data)->dmmap_section, NULL, NULL);
+
+	return 0;
+}
+
+static int addScheduleTest(char *refparam, struct dmctx *ctx, void *data, char **instance)
+{
+	struct dm_data curr_data = {0};
+	char sec_name[16] = {0};
+
+	snprintf(sec_name, sizeof(sec_name), "Schedule_%s", *instance);
+
+	uci_handle_add(ctx, refparam, *instance, &curr_data, "schedules", "schedule", sec_name);
+
+	// Default config option
+	dmuci_set_value_by_section(curr_data.config_section, "enable", "0");
+	dmuci_set_value_by_section(curr_data.config_section, "duration", "1");
+
+	for (int i = 0; allowed_days[i] != NULL; i++)
+		dmuci_add_list_value_by_section(curr_data.config_section, "day", allowed_days[i]);
+
+	// Default dmmap option
+	dmuci_set_value_by_section(curr_data.dmmap_section, "Alias", sec_name);
+
+	return 0;
+}
+
+static int delScheduleTest(char *refparam, struct dmctx *ctx, void *data, char *instance, unsigned char del_action)
 {
 	dmuci_delete_by_section(((struct dm_data *)data)->config_section, NULL, NULL);
 	dmuci_delete_by_section(((struct dm_data *)data)->dmmap_section, NULL, NULL);
@@ -175,19 +201,30 @@ static int delSchedule(char *refparam, struct dmctx *ctx, void *data, char *inst
  *************************************************************/
 static int browseScheduleInstance(struct dmctx *dmctx, DMNODE *parent_node, void *prev_data, char *prev_instance)
 {
-	struct dm_data *p = NULL;
+	struct dm_data curr_data = {0};
 	char *inst = NULL;
-	LIST_HEAD(dup_list);
 
-	synchronize_specific_config_sections_with_dmmap("schedules", "schedule", "dmmap_schedules", &dup_list);
-	list_for_each_entry(p, &dup_list, list) {
-
-		inst = handle_instance(dmctx, parent_node, p->dmmap_section, "schedule_instance", "schedule_alias");
-
-		if (DM_LINK_INST_OBJ(dmctx, parent_node, (void *)p, inst) == DM_STOP)
+	uci_foreach_sections("schedules", "schedule", curr_data.config_section) {
+		inst = uci_handle_instance(dmctx, parent_node, &curr_data);
+		if (DM_LINK_INST_OBJ(dmctx, parent_node, (void *)&curr_data, inst) == DM_STOP)
 			break;
 	}
-	free_dmmap_config_dup_list(&dup_list);
+
+	return 0;
+}
+
+static int browseScheduleTestInstance(struct dmctx *dmctx, DMNODE *parent_node, void *prev_data, char *prev_instance)
+{
+	struct dm_data curr_data = {0};
+	char *prev_schedule = section_name(((struct dm_data *)prev_data)->config_section);
+	char *inst = NULL;
+
+	uci_foreach_option_eq("schedules", "test", "schedule", prev_schedule, curr_data.config_section) {
+		inst = uci_handle_instance(dmctx, parent_node, &curr_data);
+		if (DM_LINK_INST_OBJ(dmctx, parent_node, (void *)&curr_data, inst) == DM_STOP)
+			break;
+	}
+
 	return 0;
 }
 
@@ -253,7 +290,7 @@ static int set_schedule_enable(char *refparam, struct dmctx *ctx, void *data, ch
 
 static int get_schedule_alias(char *refparam, struct dmctx *ctx, void *data, char *instance, char **value)
 {
-	return bbf_get_alias(ctx, ((struct dm_data *)data)->dmmap_section, "schedule_alias", instance, value);
+	return bbf_get_alias(ctx, ((struct dm_data *)data)->dmmap_section, "Alias", instance, value);
 }
 
 static int set_schedule_alias(char *refparam, struct dmctx *ctx, void *data, char *instance, char *value, int action)
@@ -281,8 +318,8 @@ static int set_schedule_alias(char *refparam, struct dmctx *ctx, void *data, cha
 		break;
 	case VALUESET:
 		dmuci_rename_section_by_section(((struct dm_data *)data)->config_section, value);
-		dmuci_set_value_by_section(((struct dm_data *)data)->dmmap_section, "section_name", value);
-		dmuci_set_value_by_section(((struct dm_data *)data)->dmmap_section, "schedule_alias", value);
+		dmuci_set_value_by_section(((struct dm_data *)data)->dmmap_section, "__section_name__", value);
+		dmuci_set_value_by_section(((struct dm_data *)data)->dmmap_section, "Alias", value);
 		break;
 	}
 
@@ -426,13 +463,97 @@ static int get_schedule_status(char *refparam, struct dmctx *ctx, void *data, ch
 	return 0;
 }
 
+static int get_schedule_test_number(char *refparam, struct dmctx *ctx, void *data, char *instance, char **value)
+{
+	unsigned int cnt = get_number_of_entries(ctx, data, instance, browseScheduleTestInstance);
+	dmasprintf(value, "%u", cnt);
+	return 0;
+}
+
+static int get_schedule_test_enable(char *refparam, struct dmctx *ctx, void *data, char *instance, char **value)
+{
+	*value = dmuci_get_value_by_section_fallback_def(((struct dm_data *)data)->config_section, "enable", "0");
+	return 0;
+}
+
+static int set_schedule_test_enable(char *refparam, struct dmctx *ctx, void *data, char *instance, char *value, int action)
+{
+	bool b;
+	int ret = 0;
+
+	switch (action) {
+	case VALUECHECK:
+		if (bbfdm_validate_boolean(ctx, value))
+			ret = FAULT_9007;
+		break;
+	case VALUESET:
+		string_to_bool(value, &b);
+		dmuci_set_value_by_section(((struct dm_data *)data)->config_section, "enable", b ? "1" : "0");
+		break;
+	}
+
+	return ret;
+}
+
+static int get_schedule_test_alias(char *refparam, struct dmctx *ctx, void *data, char *instance, char **value)
+{
+	return bbf_get_alias(ctx, ((struct dm_data *)data)->dmmap_section, "Alias", instance, value);
+}
+
+static int set_schedule_test_alias(char *refparam, struct dmctx *ctx, void *data, char *instance, char *value, int action)
+{
+	int ret = 0;
+
+	switch (action) {
+	case VALUECHECK:
+		if (bbfdm_validate_string(ctx, value, -1, 64, NULL, NULL)) {
+			ret = FAULT_9007;
+			break;
+		}
+
+		/* alias is mapped with the section name because this value is used by external packages
+		 * to refer to schedule configuration. As alias is mapped with section name so we can't
+		 * accept empty value and as well as special characters in the alias.
+		 * Encoded section name is also not used because that will keep the section name encoded
+		 * but the linker value will return decoded string value thus external package will fail
+		 * to refer to correct section */
+		if ((DM_STRLEN(value) == 0) || special_char_exits(value)) {
+			bbfdm_set_fault_message(ctx, "Empty value and character other than A-Z,a-z,0-9 and _ are not allowed");
+			ret = FAULT_9007;
+		}
+
+		break;
+	case VALUESET:
+		dmuci_rename_section_by_section(((struct dm_data *)data)->config_section, value);
+		dmuci_set_value_by_section(((struct dm_data *)data)->dmmap_section, "__section_name__", value);
+		dmuci_set_value_by_section(((struct dm_data *)data)->dmmap_section, "Alias", value);
+		break;
+	}
+
+	return ret;
+}
+
 /**********************************************************************************************************************************
 *                                            OBJ & PARAM DEFINITION
 ***********************************************************************************************************************************/
+/* *** Device.Schedules.{i}.Test. *** */
+DMOBJ tScheduleObj[] = {
+/* OBJ, permission, addobj, delobj, checkdep, browseinstobj, nextdynamicobj, dynamicleaf, nextobj, leaf, linker, bbfdm_type, uniqueKeys, version*/
+{"Test", &DMWRITE, addScheduleTest, delScheduleTest, NULL, browseScheduleTestInstance, NULL, NULL, NULL, tScheduleTestParams, NULL, BBFDM_BOTH, NULL},
+{0}
+};
+
+DMLEAF tScheduleTestParams[] = {
+/* PARAM, permission, type, getvalue, setvalue, bbfdm_type, version*/
+{"Alias", &DMWRITE, DMT_STRING, get_schedule_test_alias, set_schedule_test_alias, BBFDM_BOTH, DM_FLAG_UNIQUE|DM_FLAG_LINKER},
+{"Enable", &DMWRITE, DMT_BOOL, get_schedule_test_enable, set_schedule_test_enable, BBFDM_BOTH},
+{0}
+};
+
 /* *** Device.Schedules. *** */
 DMOBJ tSchedulesObj[] = {
 /* OBJ, permission, addobj, delobj, checkdep, browseinstobj, nextdynamicobj, dynamicleaf, nextobj, leaf, linker, bbfdm_type, uniqueKeys, version*/
-{"Schedule", &DMWRITE, addSchedule, delSchedule, NULL, browseScheduleInstance, NULL, NULL, NULL, tScheduleParams, NULL, BBFDM_BOTH, NULL},
+{"Schedule", &DMWRITE, addSchedule, delSchedule, NULL, browseScheduleInstance, NULL, NULL, tScheduleObj, tScheduleParams, NULL, BBFDM_BOTH, NULL},
 {0}
 };
 
@@ -452,5 +573,6 @@ DMLEAF tScheduleParams[] = {
 {"Day", &DMWRITE, DMT_STRING, get_schedule_day, set_schedule_day, BBFDM_BOTH},
 {"StartTime", &DMWRITE, DMT_STRING, get_schedule_start, set_schedule_start, BBFDM_BOTH},
 {"Duration", &DMWRITE, DMT_UNINT, get_schedule_duration, set_schedule_duration, BBFDM_BOTH},
+{"TestNumberOfEntries", &DMREAD, DMT_UNINT, get_schedule_test_number, NULL, BBFDM_BOTH},
 {0}
 };
