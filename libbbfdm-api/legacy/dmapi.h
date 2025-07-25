@@ -170,6 +170,11 @@ struct dm_reference {
 	bool is_valid_path;
 };
 
+enum {
+	BBFDM_API_V0,
+	BBFDM_API_V1
+};
+
 struct dmctx {
 	bool stop;
 	bool match;
@@ -188,6 +193,7 @@ struct dmctx {
 	int faultcode;
 	int setaction;
 	unsigned int dm_type;
+	unsigned int bbfdm_api_version;
 	unsigned char inparam_isparam;
 	unsigned char findparam;
 
@@ -207,7 +213,8 @@ struct dmctx {
 	struct ubus_context *ubus_ctx;
 	struct list_head *memhead;
 
-	char *inst_buf[16];
+	const char *obj_buf[16];
+	const char *inst_buf[16];
 	char fault_msg[256];
 };
 
@@ -215,6 +222,7 @@ typedef struct dmnode {
 	DMOBJ *obj;
 	struct dmnode *parent;
 	char *current_object;
+	char *current_object_file;
 	void *prev_data;
 	char *prev_instance;
 	unsigned char instance_level;

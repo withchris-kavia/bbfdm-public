@@ -173,6 +173,7 @@ bool value_exists_in_uci_list(struct uci_list *list, const char *value);
 bool value_exits_in_str_list(const char *str_list, const char *delimitor, const char *str);
 char *add_str_to_str_list(const char *str_list, const char *delimitor, const char *str);
 char *remove_str_from_str_list(const char *str_list, const char *delimitor, const char *str);
+struct uci_section *get_config_section_from_dmmap_section_name(const char *config_sec_name);
 struct uci_section *get_origin_section_from_config(const char *package, const char *section_type, const char *orig_section_name);
 struct uci_section *get_origin_section_from_dmmap(const char *package, const char *section_type, const char *orig_section_name);
 struct uci_section *get_dup_section_in_dmmap(const char *dmmap_package, const char *section_type, const char *orig_section_name);
@@ -212,7 +213,7 @@ int bbfdm_validate_string_list(struct dmctx *ctx, const char *value, int min_ite
 int bbfdm_validate_hexBinary_list(struct dmctx *ctx, const char *value, int min_item, int max_item, int max_size, struct range_args r_args[], int r_args_size);
 int bbf_get_alias(struct dmctx *ctx, struct uci_section *s, const char *option_name, const char *instance, char **value);
 int bbf_set_alias(struct dmctx *ctx, struct uci_section *s, const char *option_name, const char *instance, const char *value);
-char *bbfdm_resolve_external_reference(struct dmctx *ctx, const char *linker_path, const char *linker_value);
+char *bbfdm_resolve_external_reference_via_json(struct dmctx *ctx, const char *linker_path, const char *linker_value);
 int bbfdm_get_references(struct dmctx *ctx, int match_action, const char *base_path, const char *key_name, char *key_value, char *out, size_t out_len);
 int _bbfdm_get_references(struct dmctx *ctx, const char *base_path, const char *key_name, char *key_value, char **value);
 int bbfdm_get_reference_linker(struct dmctx *ctx, char *reference_path, struct dm_reference *reference_args);

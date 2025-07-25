@@ -351,7 +351,7 @@ static char *find_path_recursive(json_object *curr, char **parts, int index, int
 	return NULL;
 }
 
-char *bbfdm_resolve_external_reference(struct dmctx *ctx, const char *linker_path, const char *linker_value)
+char *bbfdm_resolve_external_reference_via_json(struct dmctx *ctx, const char *linker_path, const char *linker_value)
 {
 	char file_path[256] = {0};
 	char *reference_path = NULL;
@@ -379,10 +379,49 @@ char *bbfdm_resolve_external_reference(struct dmctx *ctx, const char *linker_pat
 	return reference_path;
 }
 
+static char *bbfdm_resolve_external_reference_via_dmmap(struct dmctx *ctx, const char *linker_path, const char *linker_name, const char *linker_value)
+{
+	struct uci_section *dmmap_obj = NULL;
+	size_t count = 0;
+
+	if (DM_STRLEN(linker_path) == 0 || DM_STRLEN(linker_name) == 0 || DM_STRLEN(linker_value) == 0)
+		return NULL;
+
+	char **parts = strsplit(linker_path, ".", &count);
+	if (count < 2)
+		return NULL;
+
+	uci_path_foreach_sections(bbfdm, parts[1], parts[count - 1], dmmap_obj) {
+		char *curr_value = NULL;
+
+		dmuci_get_value_by_section_string(dmmap_obj, linker_name, &curr_value);
+		if (DM_STRCMP(curr_value, linker_value) == 0) {
+			char *linker_instance = NULL;
+			char *reference_path = NULL;
+
+			dmuci_get_value_by_section_string(dmmap_obj, "__instance__", &linker_instance);
+			dmasprintf(&reference_path, "%s%s", linker_path, linker_instance);
+			return reference_path;
+		}
+	}
+
+	return NULL;
+}
+
 int bbfdm_get_references(struct dmctx *ctx, int match_action, const char *base_path, const char *key_name, char *key_value, char *out, size_t out_len)
 {
 	char param_path[1024] = {0};
 	char *value = NULL;
+
+	if (!out || !out_len) {
+		BBF_ERR("Output buffer is NULL or has zero length. A valid buffer with sufficient size is required");
+		return -1;
+	}
+
+	size_t len = strlen(out);
+
+	if (match_action == MATCH_FIRST && len > 0) // Reference path is already resolved
+		return 0;
 
 	if (DM_STRLEN(base_path) == 0) {
 		BBF_ERR("Reference base path should not be empty!!!");
@@ -399,16 +438,6 @@ int bbfdm_get_references(struct dmctx *ctx, int match_action, const char *base_p
 		return -1;
 	}
 
-	if (!out || !out_len) {
-		BBF_ERR("Output buffer is NULL or has zero length. A valid buffer with sufficient size is required");
-		return -1;
-	}
-
-	size_t len = strlen(out);
-
-	if (match_action == MATCH_FIRST && len > 0) // Reference path is already resolved
-		return 0;
-
 	snprintf(param_path, sizeof(param_path), "%s*.%s", base_path, key_name);
 
 	adm_entry_get_reference_param(ctx, param_path, key_value, &value);
@@ -424,7 +453,13 @@ int bbfdm_get_references(struct dmctx *ctx, int match_action, const char *base_p
 		return 0;
 	}
 
-	char *external_reference = bbfdm_resolve_external_reference(ctx, param_path, key_value);
+	char *external_reference = NULL;
+
+	if (ctx->bbfdm_api_version == BBFDM_API_V1)
+		external_reference = bbfdm_resolve_external_reference_via_dmmap(ctx, base_path, key_name, key_value);
+	else
+		external_reference = bbfdm_resolve_external_reference_via_json(ctx, param_path, key_value);
+
 	if (external_reference != NULL) {
 
 		if (out_len - len < strlen(external_reference)) {

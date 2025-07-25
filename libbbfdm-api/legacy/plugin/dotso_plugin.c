@@ -128,6 +128,9 @@ int load_dotso_plugins(DMOBJ *entryobj, const char *plugin_path)
 			}
 
 		}
+
+		if (dynamic_obj[i].init_module)
+			dynamic_obj[i].init_module(NULL);
 	}
 	add_list_loaded_libraries(&loaded_library_list, handle);
 

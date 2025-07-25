@@ -27,9 +27,17 @@
 #include "dmmem.h"
 #include "dmapi.h"
 
-int get_number_of_entries(struct dmctx *ctx, void *data, char *instance, int (*browseinstobj)(struct dmctx *ctx, struct dmnode *node, void *data, char *instance));
+int get_number_of_entries(struct dmctx *ctx, void *data, char *instance, int (*browseinstobj)(struct dmctx *ctx, struct dmnode *node, void *data, char *instance)); // To be removed later!!!!!!!!!!!!
+
 char *handle_instance(struct dmctx *dmctx, DMNODE *parent_node, struct uci_section *s, const char *inst_opt, const char *alias_opt);
 char *handle_instance_without_section(struct dmctx *dmctx, DMNODE *parent_node, int inst_nbr);
+
+struct uci_section *create_dmmap_obj(struct dmctx *dmctx, unsigned char instance_level,
+		const char *obj_file, const char *obj_name, struct uci_section *config_sec,
+		char **instance);
+int generic_browse(struct dmctx *dmctx, DMNODE *parent_node, void *prev_data, char *prev_instance);
+char *uci_handle_instance(struct dmctx *dmctx, DMNODE *parent_node, struct dm_data *data);
+
 int get_empty(char *refparam, struct dmctx *ctx, void *data, char *instance, char **value);
 
 void fill_blob_param(struct blob_buf *bb, const char *path, const char *data, const char *type, uint32_t dm_flags);

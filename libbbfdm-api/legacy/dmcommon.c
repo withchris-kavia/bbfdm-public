@@ -314,6 +314,18 @@ void free_dmmap_config_dup_list(struct list_head *dup_list)
 /*
  * Function allows to synchronize config section with dmmap config
  */
+
+struct uci_section *get_config_section_from_dmmap_section_name(const char *config_sec_name)
+{
+	if (DM_STRLEN(config_sec_name) == 0)
+		return NULL;
+
+	char *p = strchr(config_sec_name, '.');
+	if (p) *p = 0;
+
+	return dmuci_get_section(config_sec_name, p ? p + 1 : "");
+}
+
 struct uci_section *get_origin_section_from_config(const char *package, const char *section_type, const char *orig_section_name)
 {
 	struct uci_section *s = NULL;

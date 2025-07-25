@@ -674,7 +674,7 @@ static char *handle_reference_value(struct dmctx *ctx, struct json_object *linke
 	if (DM_STRLEN(pref) != 0)
 		return pref;
 
-	pref = bbfdm_resolve_external_reference(ctx, linker_path, key_value);
+	pref = bbfdm_resolve_external_reference_via_json(ctx, linker_path, key_value);
 
 	return pref ? pref : "";
 }

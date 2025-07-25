@@ -431,6 +431,7 @@ static void dm_browse_entry(struct dmctx *dmctx, DMNODE *parent_node, DMOBJ *ent
 	node.matched = parent_node->matched;
 	node.prev_data = data;
 	node.prev_instance = instance;
+	node.current_object_file = parent_node->current_object_file;
 
 	if (!bbfdatamodel_matches(dmctx->dm_type, entryobj->bbfdm_type)) {
 		*err = FAULT_9005;
@@ -446,6 +447,10 @@ static void dm_browse_entry(struct dmctx *dmctx, DMNODE *parent_node, DMOBJ *ent
 		dmasprintf(&(node.current_object), "%s%s.{i}.", parent_obj, entryobj->obj);
 	else
 		dmasprintf(&(node.current_object), "%s%s.", parent_obj, entryobj->obj);
+
+	if (DM_STRCMP(parent_obj, ROOT_NODE) == 0) {
+		node.current_object_file = entryobj->obj;
+	}
 
 	if (dmctx->checkobj) {
 		*err = dmctx->checkobj(dmctx, &node, entryobj->permission, entryobj->addobj, entryobj->delobj, entryobj->get_linker, data, instance);
@@ -526,7 +531,7 @@ int dm_link_inst_obj(struct dmctx *dmctx, DMNODE *parent_node, void *data, char 
 	char *parent_obj;
 	DMNODE node = {0};
 
-	if (parent_node->browse_type == BROWSE_FIND_MAX_INST) {
+	if (parent_node->browse_type == BROWSE_FIND_MAX_INST) { // To be removed later!!!!!!!!!!!!
 		int curr_inst = (instance && *instance != '\0') ? DM_STRTOL(instance) : 0;
 		if (curr_inst > parent_node->max_instance)
 			parent_node->max_instance = curr_inst;
@@ -534,7 +539,7 @@ int dm_link_inst_obj(struct dmctx *dmctx, DMNODE *parent_node, void *data, char 
 	}
 
 	parent_node->num_of_entries++;
-	if (parent_node->browse_type == BROWSE_NUM_OF_ENTRIES)
+	if (parent_node->browse_type == BROWSE_NUM_OF_ENTRIES) // To be removed later!!!!!!!!!!!!
 		return 0;
 
 	DMOBJ *prevobj = parent_node->obj;
@@ -546,6 +551,7 @@ int dm_link_inst_obj(struct dmctx *dmctx, DMNODE *parent_node, void *data, char 
 	node.instance_level = parent_node->instance_level + 1;
 	node.is_instanceobj = 1;
 	node.matched = parent_node->matched;
+	node.current_object_file = parent_node->current_object_file;
 
 	parent_obj = parent_node->current_object;
 	if (instance == NULL)
@@ -595,8 +601,53 @@ int get_number_of_entries(struct dmctx *ctx, void *data, char *instance, int (*b
 {
 	DMNODE node = {0};
 
-	node.browse_type = BROWSE_NUM_OF_ENTRIES;
-	(browseinstobj)(ctx, &node, data, instance);
+	if (browseinstobj == NULL) {
+		int instance_level = 0;
+		size_t count = 0;
+
+		if (!ctx->addobj_instance)
+			return 0;
+
+		char **parts = strsplit(ctx->addobj_instance, ".", &count);
+		if (count < 2)
+			return -1;
+
+		for (int idx = 0; idx < count - 1; idx++) {
+
+			int i = 0;
+			bool is_instance = false;
+			while (parts[idx][i] != 0) {
+				if (isdigit(parts[idx][i]) != 0) {
+					is_instance = true;
+					break;
+				}
+				i++;
+			}
+
+			if (is_instance) instance_level++;
+		}
+
+		char *p = DM_STRSTR(parts[count - 1], "NumberOfEntries");
+		if (p) *p = 0;
+
+		node.obj = dmcalloc(1, sizeof(struct dm_obj_s));
+		if (node.obj == NULL) {
+			BBF_ERR("Failed to allocate memory");
+			return 0;
+		}
+
+		node.current_object_file = parts[1];
+		node.obj->obj = parts[count - 1];
+		node.instance_level = instance_level;
+
+		node.browse_type = BROWSE_NUM_OF_ENTRIES;
+		generic_browse(ctx,&node, data, instance);
+	} else {
+		node.browse_type = BROWSE_NUM_OF_ENTRIES;
+		(browseinstobj)(ctx, &node, data, instance);
+	}
+
+	node.browse_type = BROWSE_NORMAL;
 	return node.num_of_entries;
 }
 
@@ -637,6 +688,100 @@ char *handle_instance(struct dmctx *dmctx, DMNODE *parent_node, struct uci_secti
 	return instance ? instance : "";
 }
 
+struct uci_section *create_dmmap_obj(struct dmctx *dmctx, unsigned char instance_level,
+		const char *obj_file, const char *obj_name, struct uci_section *config_sec,
+		char **instance)
+{
+	struct uci_section *s = NULL, *dmmap_section = NULL;
+	char config_sec_name[128] = {0};
+	int max_instance = 0;
+
+	if (!dmctx || !obj_file || !obj_name || !instance)
+		return NULL;
+
+	if (config_sec != NULL) {
+		snprintf(config_sec_name, sizeof(config_sec_name), "%s.%s", section_config(config_sec), section_name(config_sec));
+	}
+
+	uci_path_foreach_sections(bbfdm, obj_file, obj_name, s) {
+		bool is_same_parent = true;
+
+		for (int i = 0; i < instance_level; i++) {
+			char *curr_obj_inst = NULL;
+			dmuci_get_value_by_section_string(s, dmctx->obj_buf[i], &curr_obj_inst);
+			if (DM_STRCMP(curr_obj_inst, dmctx->inst_buf[i]) != 0) {
+				is_same_parent = false;
+				break;
+			}
+		}
+
+		if (is_same_parent == false)
+			continue;
+
+		char *curr_instance = NULL;
+		dmuci_get_value_by_section_string(s, "__instance__", &curr_instance);
+		int curr_instance_int = (curr_instance && *curr_instance != '\0') ? DM_STRTOL(curr_instance) : 0;
+		if (curr_instance_int > max_instance)
+			max_instance = curr_instance_int;
+
+		if (config_sec != NULL) {
+			char *curr_sec_name = NULL;
+			dmuci_get_value_by_section_string(s, "__section_name__", &curr_sec_name);
+			if (DM_STRCMP(curr_sec_name, config_sec_name) == 0) {
+				dmctx->obj_buf[instance_level] = obj_name;
+				dmctx->inst_buf[instance_level] = curr_instance;
+				*instance = curr_instance;
+				return dmmap_section;
+			}
+		}
+	}
+
+	dmasprintf(instance, "%d", max_instance + 1);
+
+	if (dmmap_section == NULL) {
+		// Section not found -> create it
+		char s_name[64] = {0};
+		int pos = 0;
+
+		dmuci_add_section_bbfdm(obj_file, obj_name, &dmmap_section);
+
+		for (int i = 0; i < instance_level; i++) {
+			dmuci_set_value_by_section(dmmap_section, dmctx->obj_buf[i], dmctx->inst_buf[i]);
+			pos += snprintf(&s_name[pos], sizeof(s_name) - pos, "%s_%s", dmctx->obj_buf[i], dmctx->inst_buf[i]);
+		}
+
+		snprintf(&s_name[pos], sizeof(s_name) - pos, "%s_%s", obj_name, *instance);
+
+		dmuci_rename_section_by_section(dmmap_section, s_name);
+
+		dmuci_set_value_by_section(dmmap_section, "__section_name__", config_sec_name);
+		dmuci_set_value_by_section(dmmap_section, "__instance__", *instance);
+	}
+
+	dmctx->obj_buf[instance_level] = obj_name;
+	dmctx->inst_buf[instance_level] = *instance;
+
+	return dmmap_section;
+}
+
+char *uci_handle_instance(struct dmctx *dmctx, DMNODE *parent_node, struct dm_data *data)
+{
+	char *instance = NULL;
+
+	switch(parent_node->browse_type) {
+	case BROWSE_NORMAL: // To be removed later!!!!!!!!!!!!
+		dmuci_get_value_by_section_string(data->dmmap_section, "__instance__", &instance);
+		dmctx->obj_buf[parent_node->instance_level] = parent_node->obj->obj;
+		dmctx->inst_buf[parent_node->instance_level] = instance ? instance : "";
+		break;
+	case BROWSE_FIND_MAX_INST: // To be removed later!!!!!!!!!!!!
+	case BROWSE_NUM_OF_ENTRIES: // To be removed later!!!!!!!!!!!!
+		break;
+	}
+
+	return instance ? instance : "";
+}
+
 char *handle_instance_without_section(struct dmctx *dmctx, DMNODE *parent_node, int inst_nbr)
 {
 	char *instance = NULL;
@@ -653,6 +798,42 @@ char *handle_instance_without_section(struct dmctx *dmctx, DMNODE *parent_node, 
 	dmctx->inst_buf[parent_node->instance_level] = instance ? instance : "";
 
 	return instance ? instance : "";
+}
+
+int generic_browse(struct dmctx *dmctx, DMNODE *parent_node, void *prev_data, char *prev_instance)
+{
+	struct dm_data curr_data = {0};
+	char *instance = NULL;
+
+	// This check is added to prevent crashes if the object is updated to new design but forgot to update its NumberOfEntries parameter maps to it
+	if (parent_node->obj == NULL)
+		return 0;
+
+	uci_path_foreach_sections(bbfdm, parent_node->current_object_file, parent_node->obj->obj, curr_data.dmmap_section) {
+		char *config_sec_name = NULL;
+		bool is_same_parent = true;
+
+		for (int i = 0; i < parent_node->instance_level; i++) {
+			char *curr_obj_inst = NULL;
+			dmuci_get_value_by_section_string(curr_data.dmmap_section, dmctx->obj_buf[i], &curr_obj_inst);
+			if (DM_STRCMP(curr_obj_inst, dmctx->inst_buf[i]) != 0) {
+				is_same_parent = false;
+				break;
+			}
+		}
+
+		if (is_same_parent == false)
+			continue;
+
+		dmuci_get_value_by_section_string(curr_data.dmmap_section, "__section_name__", &config_sec_name);
+		curr_data.config_section = get_config_section_from_dmmap_section_name(config_sec_name);
+
+		instance = uci_handle_instance(dmctx, parent_node, &curr_data);
+		if (DM_LINK_INST_OBJ(dmctx, parent_node, (void *)&curr_data, instance) == DM_STOP)
+			break;
+	}
+
+	return 0;
 }
 
 int get_empty(char *refparam, struct dmctx *ctx, void *data, char *instance, char **value)
@@ -901,10 +1082,12 @@ static int get_value_obj(DMOBJECT_ARGS)
 
 static int get_value_param(DMPARAM_ARGS)
 {
-	char full_param[MAX_DM_PATH] = {0};
+	char *full_param = NULL;
 	char *value = dmstrdup("");
 
-	snprintf(full_param, sizeof(full_param), "%s%s", node->current_object, leaf->parameter);
+	dmasprintf(&full_param, "%s%s", node->current_object, leaf->parameter);
+
+	dmctx->addobj_instance = full_param; // This assignment is needed to pass the refparam in order to calculate the NumberOfEntries param
 
 	(leaf->getvalue)(full_param, dmctx, data, instance, &value);
 
@@ -926,10 +1109,10 @@ static int mobj_get_value_in_param(DMOBJECT_ARGS)
 }
 static int mparam_get_value_in_param(DMPARAM_ARGS)
 {
-	char full_param[MAX_DM_PATH] = {0};
+	char *full_param = NULL;
 	char *value = dmstrdup("");
 
-	snprintf(full_param, sizeof(full_param), "%s%s", node->current_object, leaf->parameter);
+	dmasprintf(&full_param, "%s%s", node->current_object, leaf->parameter);
 
 	if (dmctx->iswildcard) {
 		if (dm_strcmp_wildcard(dmctx->in_param, full_param) != 0)
@@ -938,6 +1121,8 @@ static int mparam_get_value_in_param(DMPARAM_ARGS)
 		if (DM_STRCMP(dmctx->in_param, full_param) != 0)
 			return FAULT_9005;
 	}
+
+	dmctx->addobj_instance = full_param; // This assignment is needed to pass the refparam in order to calculate the NumberOfEntries param
 
 	(leaf->getvalue)(full_param, dmctx, data, instance, &value);
 
@@ -1351,6 +1536,7 @@ static int mobj_add_object(DMOBJECT_ARGS)
 	char *refparam = node->current_object;
 	char *perm = permission->val;
 	char *new_instance = NULL;
+	char file_path[64] = {0};
 	int fault = 0;
 
 	if (DM_STRCMP(refparam, dmctx->in_param) != 0)
@@ -1365,16 +1551,43 @@ static int mobj_add_object(DMOBJECT_ARGS)
 	if (perm[0] == '0' || addobj == NULL)
 		return FAULT_9005;
 
-	int max_inst = find_max_instance(dmctx, node);
-	fault = dmasprintf(&new_instance, "%d", max_inst);
-	if (fault)
-		return fault;
+	snprintf(file_path, sizeof(file_path), "/etc/bbfdm/dmmap/%s", node->current_object_file);
 
-	dmctx->stop = 1;
+	if (file_exists(file_path)) {
+		struct dm_data curr_data = {0};
 
-	fault = (addobj)(refparam, dmctx, data, &new_instance);
-	if (fault)
-		return fault;
+		curr_data.dmmap_section = create_dmmap_obj(dmctx, node->instance_level, node->current_object_file, node->obj->obj, NULL, &new_instance);
+		if (DM_STRLEN(new_instance) == 0 || curr_data.dmmap_section == NULL)
+			return FAULT_9005;
+
+		dmctx->stop = 1;
+
+		// cppcheck-suppress autoVariables
+		dmctx->addobj_instance = (char *)&curr_data;
+
+		fault = (addobj)(refparam, dmctx, data, &new_instance);
+		if (fault)
+			return fault;
+
+		if (curr_data.config_section != NULL) {
+			char sec_name[128] = {0};
+
+			snprintf(sec_name, sizeof(sec_name), "%s.%s", section_config(curr_data.config_section), section_name(curr_data.config_section));
+			dmuci_set_value_by_section(curr_data.dmmap_section, "__section_name__", sec_name);
+		}
+	} else {
+		int max_inst = find_max_instance(dmctx, node);
+		fault = dmasprintf(&new_instance, "%d", max_inst);
+		if (fault)
+			return fault;
+
+		dmctx->stop = 1;
+
+		fault = (addobj)(refparam, dmctx, data, &new_instance);
+		if (fault)
+			return fault;
+
+	}
 
 	dmctx->addobj_instance = new_instance;
 	return 0;

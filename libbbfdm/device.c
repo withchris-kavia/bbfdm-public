@@ -78,13 +78,27 @@ static int operate_Device_FactoryReset(char *refparam, struct dmctx *ctx, void *
 	return !res ? 0 : USP_FAULT_COMMAND_FAILURE;
 }
 
+/*************************************************************
+* Init & Clean Module
+**************************************************************/
+int init_core_module(void *data)
+{
+	struct dmctx bbf_ctx = {0};
+
+	bbf_ctx_init(&bbf_ctx, NULL);
+	dmmap_synchronizeSchedulesSchedule(&bbf_ctx);
+	bbf_ctx_clean(&bbf_ctx);
+
+	return 0;
+}
+
 /**********************************************************************************************************************************
 *                                            OBJ & LEAF DEFINITION
 ***********************************************************************************************************************************/
 /* *** BBFDM *** */
 DM_MAP_OBJ tDynamicObj[] = {
 /* parentobj, nextobject, parameter */
-{"Device.", tDMRootObj, tDMRootParams},
+{"Device.", tDMRootObj, tDMRootParams, init_core_module, NULL},
 {0}
 };
 
