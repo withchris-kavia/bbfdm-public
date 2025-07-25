@@ -37,19 +37,46 @@ static void bbfdm_uci_init_ctx(struct uci_context **uci_ctx, const char *confdir
 	uci_set_savedir(*uci_ctx, savedir);
 }
 
+static bool ensure_folder_exists(const char *path)
+{
+	if (folder_exists(path))
+		return true;
+
+	if (mkdir(path, 0755) == 0 || errno == EEXIST)
+		return true;
+
+	BBF_ERR("Failed to create directory: %s", path);
+	return false;	
+}
+
 void dm_uci_init(struct dmctx *bbf_ctx)
 {
+	ensure_folder_exists("/tmp/bbfdm/");
+
 	if (bbf_ctx->dm_type == BBFDM_CWMP) {
+		ensure_folder_exists("/tmp/bbfdm/.cwmp/");
+		ensure_folder_exists("/tmp/bbfdm/.cwmp/config/");
+		ensure_folder_exists("/tmp/bbfdm/.cwmp/dmmap/");
+
 		bbfdm_uci_init_ctx(&bbf_ctx->config_uci_ctx, config_dir, "/tmp/bbfdm/.cwmp/config/");
 		bbfdm_uci_init_ctx(&bbf_ctx->dmmap_uci_ctx, bbfdm_dir, "/tmp/bbfdm/.cwmp/dmmap/");
 	} else if (bbf_ctx->dm_type == BBFDM_USP) {
+		ensure_folder_exists("/tmp/bbfdm/.usp/");
+		ensure_folder_exists("/tmp/bbfdm/.usp/config/");
+		ensure_folder_exists("/tmp/bbfdm/.usp/dmmap/");
+
 		bbfdm_uci_init_ctx(&bbf_ctx->config_uci_ctx, config_dir, "/tmp/bbfdm/.usp/config/");
 		bbfdm_uci_init_ctx(&bbf_ctx->dmmap_uci_ctx, bbfdm_dir, "/tmp/bbfdm/.usp/dmmap/");
 	} else {
+		ensure_folder_exists("/tmp/bbfdm/.bbfdm/");
+		ensure_folder_exists("/tmp/bbfdm/.bbfdm/config/");
+		ensure_folder_exists("/tmp/bbfdm/.bbfdm/dmmap/");
+
 		bbfdm_uci_init_ctx(&bbf_ctx->config_uci_ctx, config_dir, "/tmp/bbfdm/.bbfdm/config/");
 		bbfdm_uci_init_ctx(&bbf_ctx->dmmap_uci_ctx, bbfdm_dir, "/tmp/bbfdm/.bbfdm/dmmap/");
 	}
 
+	ensure_folder_exists("/tmp/bbfdm/.varstate/");
 	bbfdm_uci_init_ctx(&bbf_ctx->varstate_uci_ctx, varstate_dir, "/tmp/bbfdm/.varstate/");
 
 	uci_ctx = bbf_ctx->config_uci_ctx;
@@ -376,8 +403,10 @@ int dmuci_commit_package(char *package)
 	if (uci_lookup_ptr(uci_ctx, &ptr, package, true) != UCI_OK)
 		return -1;
 
-	if (uci_commit(uci_ctx, &ptr.p, false) != UCI_OK)
+	if (uci_commit(uci_ctx, &ptr.p, false) != UCI_OK) {
+		BBF_ERR("Failed to commit UCI package '%s'. confdir: '%s', savedir: '%s'.", package, uci_ctx->confdir, uci_ctx->savedir);
 		return -1;
+	}
 
 	return 0;
 }
