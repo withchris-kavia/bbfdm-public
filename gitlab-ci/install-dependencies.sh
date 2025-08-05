@@ -8,6 +8,7 @@ source ./gitlab-ci/shared.sh
 exec_cmd apt update
 exec_cmd pip3 install xlwt
 
+mkdir -p /etc/bbfdm/dmmap
 # Create directories for micro-service configuration and shared files
 [ ! -d "${BBFDM_MS_CONF}" ] && mkdir -p "${BBFDM_MS_CONF}"
 [ ! -d "${BBFDM_MS_DIR}" ] && mkdir -p "${BBFDM_MS_DIR}"
