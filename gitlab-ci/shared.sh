@@ -125,7 +125,7 @@ function install_wifidmd_as_micro_service()
 {
 	[ -d "${BBFDM_PLUGIN_DEST}/wifidmd" ] && return 0
 
-	exec_cmd git clone https://dev.iopsys.eu/bbf/wifidmd.git ${BBFDM_PLUGIN_DEST}/wifidmd
+	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/bbf/wifidmd.git ${BBFDM_PLUGIN_DEST}/wifidmd
 
 	exec_cmd make -C ${BBFDM_PLUGIN_DEST}/wifidmd/src/ clean && make -C ${BBFDM_PLUGIN_DEST}/wifidmd/src/ WIFIDMD_ENABLE_WIFI_DATAELEMENTS='y'
 	exec_cmd cp -f ${BBFDM_PLUGIN_DEST}/wifidmd/src/wifidmd /usr/sbin/
@@ -135,7 +135,7 @@ function install_libeasy()
 {
 	[ -d "${BBFDM_PLUGIN_DEST}/libeasy" ] && return 0
 
-	exec_cmd git clone https://dev.iopsys.eu/iopsys/libeasy.git ${BBFDM_PLUGIN_DEST}/libeasy
+	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/iopsys/libeasy.git ${BBFDM_PLUGIN_DEST}/libeasy
 	(
 
 		cd ${BBFDM_PLUGIN_DEST}/libeasy
@@ -150,7 +150,7 @@ function install_libqos()
 {
 	[ -d "${BBFDM_PLUGIN_DEST}/libqos" ] && return 0
 
-	exec_cmd git clone https://dev.iopsys.eu/hal/libqos.git ${BBFDM_PLUGIN_DEST}/libqos
+	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/hal/libqos.git ${BBFDM_PLUGIN_DEST}/libqos
 	(
 
 		cd ${BBFDM_PLUGIN_DEST}/libqos
@@ -165,7 +165,7 @@ function install_libethernet()
 {
 	[ -d "${BBFDM_PLUGIN_DEST}/libethernet" ] && return 0
 
-	exec_cmd git clone https://dev.iopsys.eu/iopsys/libethernet.git ${BBFDM_PLUGIN_DEST}/libethernet
+	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/iopsys/libethernet.git ${BBFDM_PLUGIN_DEST}/libethernet
 	(
 		 cd ${BBFDM_PLUGIN_DEST}/libethernet
 		 make PLATFORM=TEST
@@ -183,7 +183,7 @@ function install_ethmngr_as_micro_service()
 	install_libethernet
 	install_libqos
 
-	exec_cmd git clone https://dev.iopsys.eu/hal/ethmngr.git ${BBFDM_PLUGIN_DEST}/ethmngr
+	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/hal/ethmngr.git ${BBFDM_PLUGIN_DEST}/ethmngr
 	exec_cmd make -C ${BBFDM_PLUGIN_DEST}/ethmngr
 	exec_cmd sudo cp -f ${BBFDM_PLUGIN_DEST}/ethmngr/ethmngr /usr/sbin/ethmngr
 }
@@ -192,7 +192,7 @@ function install_netmngr_as_micro_service()
 {
 	[ -d "${BBFDM_PLUGIN_DEST}/netmngr" ] && return 0
 
-	exec_cmd git clone -b devel https://dev.iopsys.eu/network/netmngr.git ${BBFDM_PLUGIN_DEST}/netmngr
+	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 -b devel https://dev.iopsys.eu/network/netmngr.git ${BBFDM_PLUGIN_DEST}/netmngr
 	
 	exec_cmd apt install iproute2 -y
 
@@ -200,21 +200,21 @@ function install_netmngr_as_micro_service()
 	exec_cmd make -C ${BBFDM_PLUGIN_DEST}/netmngr/src/ NETMNGR_GRE_OBJ=y NETMNGR_IP_OBJ=y NETMNGR_ROUTING_OBJ=y NETMNGR_PPP_OBJ=y NETMNGR_ROUTER_ADVERTISEMENT_OBJ=y NETMNGR_IPV6RD_OBJ=y
 	install_ms ${BBFDM_PLUGIN_DEST}/netmngr/src/libnetmngr.so netmngr
 
-	exec_cmd git clone https://dev.iopsys.eu/bbf/tr143d.git ${BBFDM_PLUGIN_DEST}/tr143d
+	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/bbf/tr143d.git ${BBFDM_PLUGIN_DEST}/tr143d
 	exec_cmd make -C ${BBFDM_PLUGIN_DEST}/tr143d/src/ clean && make -C ${BBFDM_PLUGIN_DEST}/tr143d/src/
 	exec_cmd cp -f utilities/files/usr/share/bbfdm/scripts/bbf_api /usr/share/bbfdm/scripts/
 	exec_cmd cp -rf ${BBFDM_PLUGIN_DEST}/tr143d/scripts/* /usr/share/bbfdm/scripts/
 	install_ms_plugin ${BBFDM_PLUGIN_DEST}/tr143d/src/libtr143d.so netmngr
 
-	exec_cmd git clone https://dev.iopsys.eu/bbf/tr471d.git ${BBFDM_PLUGIN_DEST}/tr471d
+	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/bbf/tr471d.git ${BBFDM_PLUGIN_DEST}/tr471d
 	exec_cmd make -C ${BBFDM_PLUGIN_DEST}/tr471d/src/ clean && make -C ${BBFDM_PLUGIN_DEST}/tr471d/src/
 	install_ms_plugin ${BBFDM_PLUGIN_DEST}/tr471d/src/libtr471d.so netmngr
 
-	exec_cmd git clone https://dev.iopsys.eu/bbf/twamp-light.git ${BBFDM_PLUGIN_DEST}/twamp
+	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/bbf/twamp-light.git ${BBFDM_PLUGIN_DEST}/twamp
 	exec_cmd make -C ${BBFDM_PLUGIN_DEST}/twamp clean && make -C ${BBFDM_PLUGIN_DEST}/twamp
 	install_ms_plugin ${BBFDM_PLUGIN_DEST}/twamp/libtwamp.so netmngr
 
-	exec_cmd git clone https://dev.iopsys.eu/bbf/udpecho.git ${BBFDM_PLUGIN_DEST}/udpecho
+	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/bbf/udpecho.git ${BBFDM_PLUGIN_DEST}/udpecho
 	exec_cmd make -C ${BBFDM_PLUGIN_DEST}/udpecho/src/ clean && make -C ${BBFDM_PLUGIN_DEST}/udpecho/src/
 	install_ms_plugin ${BBFDM_PLUGIN_DEST}/udpecho/src/libudpechoserver.so netmngr
 }
@@ -223,7 +223,7 @@ function install_sysmngr_as_micro_service()
 {
 	[ -d "${BBFDM_PLUGIN_DEST}/sysmngr" ] && return 0
 
-	exec_cmd git clone -b devel https://dev.iopsys.eu/system/sysmngr.git ${BBFDM_PLUGIN_DEST}/sysmngr
+	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 -b devel https://dev.iopsys.eu/system/sysmngr.git ${BBFDM_PLUGIN_DEST}/sysmngr
 
 	exec_cmd make -C ${BBFDM_PLUGIN_DEST}/sysmngr/src/ clean && \
 	exec_cmd make -C ${BBFDM_PLUGIN_DEST}/sysmngr/src/ \
