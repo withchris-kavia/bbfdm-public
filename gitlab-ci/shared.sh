@@ -192,7 +192,7 @@ function install_netmngr_as_micro_service()
 {
 	[ -d "${BBFDM_PLUGIN_DEST}/netmngr" ] && return 0
 
-	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 -b devel https://dev.iopsys.eu/network/netmngr.git ${BBFDM_PLUGIN_DEST}/netmngr
+	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/network/netmngr.git ${BBFDM_PLUGIN_DEST}/netmngr
 	
 	exec_cmd apt install iproute2 -y
 
@@ -223,7 +223,7 @@ function install_sysmngr_as_micro_service()
 {
 	[ -d "${BBFDM_PLUGIN_DEST}/sysmngr" ] && return 0
 
-	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 -b devel https://dev.iopsys.eu/system/sysmngr.git ${BBFDM_PLUGIN_DEST}/sysmngr
+	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/system/sysmngr.git ${BBFDM_PLUGIN_DEST}/sysmngr
 
 	exec_cmd make -C ${BBFDM_PLUGIN_DEST}/sysmngr/src/ clean && \
 	exec_cmd make -C ${BBFDM_PLUGIN_DEST}/sysmngr/src/ \
