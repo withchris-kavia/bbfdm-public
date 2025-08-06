@@ -42,7 +42,11 @@ else
 		echo "==== Processing plugin [$i] ===="
 
 		repo=$(jq -r ".plugins[$i].repo" "$JSON_FILE")
-		version=$(jq -r ".plugins[$i].version" "$JSON_FILE")
+		version=$(jq -r ".plugins[$i].version // empty" "$JSON_FILE")
+		if [ -z "${version}" ]; then
+			version=${BRANCH:-devel}
+		fi
+
 		plugin_name=$(basename "$repo" .git)
 		dest="$BBFDM_PLUGIN_DEST/$plugin_name"
 
@@ -55,6 +59,7 @@ else
 		echo "Repo path: $repo"
 		echo "Plugin name: $plugin_name"
 		echo "Destination: $dest"
+		echo "Version: $version"
 
 		# Install dependencies
 		if [ "$plugin_name" == "ethmngr" ]; then
@@ -70,25 +75,31 @@ else
 		if [ -d "$dest" ]; then
 			echo "Directory $dest already exists, skipping clone."
 		else
-			echo "Cloning $repo into $dest..."
+			echo "Cloning $repo into $dest, branch ${version} ..."
 			git clone -b "$version" "$repo" "$dest" || { echo "❌ Git clone failed"; exit -1; }
 		fi
 
 		cd $dest
 
 		# Compilation
-		echo "Starting compilation..."
-		jq -r ".plugins[$i].compile[]" "$JSON_FILE" | while read -r cmd; do
-			echo "Executing: $cmd"
-			eval "$cmd" || { echo "❌ Compilation command failed"; exit -1; }
-		done
+		compile="$(jq -r ".plugins[$i].compile[]" "$JSON_FILE" 2>/dev/null)"
+		if [ -n "${compile}" ]; then
+			echo "Starting compilation..."
+			jq -r ".plugins[$i].compile[]" "$JSON_FILE" 2>/dev/null| while read -r cmd; do
+				echo "Executing: $cmd"
+				eval "$cmd" || { echo "❌ Compilation command failed"; exit -1; }
+			done
+		fi
 
 		# Post-install
-		echo "Running post-install steps..."
-		jq -r ".plugins[$i].post_install[]" "$JSON_FILE" 2>/dev/null | while read -r post_cmd; do
-			echo "Executing: $post_cmd"
-			eval "$post_cmd" || { echo "❌ Post-install command failed"; exit -1; }
-		done
+		post_install="$(jq -r ".plugins[$i].post_install[]" "$JSON_FILE" 2>/dev/null)"
+		if [ -n "${post_install}" ]; then
+			echo "Running post-install steps..."
+			jq -r ".plugins[$i].post_install[]" "$JSON_FILE" 2>/dev/null| while read -r post_cmd; do
+				echo "Executing: $post_cmd"
+				eval "$post_cmd" || { echo "❌ Post-install command failed"; exit -1; }
+			done
+		fi
 
 		# Save dm_info_file if defined
 		dm_info_file=$(jq -r ".plugins[$i].dm_info_file // empty" "$JSON_FILE")

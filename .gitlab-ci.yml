@@ -4,6 +4,7 @@ variables:
   COMPILATION_FIXUP: "cmake -DBBF_VENDOR_PREFIX=\\\"X_IOPSYS_EU_\\\" -DBBF_MAX_OBJECT_INSTANCES=255 -DBBFDMD_MAX_MSG_LEN=1048576 -DCMAKE_INSTALL_PREFIX=/"
   CPPCHECK_OPTIONS: "--suppress=cert-MSC24-C -DBBF_VENDOR_PREFIX=X_IOPSYS_EU_"
   CPD_OPTIONS: "--exclude ./build/ --minimum-tokens 200"
+  BRANCH: 'devel'
 
 before_script:
   - |

@@ -12,7 +12,6 @@
     {
       "repo": "https://dev.iopsys.eu/feed/iopsys.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "core",
       "unified_daemon": false,
       "post_install": [
@@ -20,9 +19,54 @@
       ]
     },
     {
+      "repo": "https://dev.iopsys.eu/feed/iopsys.git",
+      "proto": "git",
+      "service_name": "netmode",
+      "unified_daemon": false,
+      "post_install": [
+        "sed 's/{BBF_VENDOR_PREFIX}/X_IOWRT_EU_/g' netmode/files/datamodel.json > /usr/share/bbfdm/micro_services/netmode.json",
+        "sed 's/{BBF_VENDOR_PREFIX}/X_IOWRT_EU_/g' netmode/bbfdm_service.json > /etc/bbfdm/services/netmode.json"
+      ]
+    },
+    {
+      "repo": "https://dev.iopsys.eu/feed/iopsys.git",
+      "proto": "git",
+      "service_name": "ponmngr",
+      "unified_daemon": false,
+      "post_install": [
+        "cp -f /opt/dev/iopsys/ponmngr/files/etc/ponmngr/xpon.json /usr/share/bbfdm/micro_services/ponmngr.json",
+        "cp -f /opt/dev/iopsys/ponmngr/bbfdm_service.json /etc/bbfdm/services/ponmngr.json"
+      ]
+    },
+    {
+      "repo": "https://dev.iopsys.eu/feed/iopsys.git",
+      "proto": "git",
+      "compile": [
+        "make -C self-diagnostics/src clean",
+        "make -C self-diagnostics/src"
+      ],
+      "post_install": [
+        "mkdir -p /usr/share/bbfdm/micro_services/core",
+        "cp -f /opt/dev/iopsys/self-diagnostics/src/libselftest.so /usr/share/bbfdm/micro_services/core"
+      ]
+    },
+    {
+      "repo": "https://dev.iopsys.eu/feed/iopsys.git",
+      "proto": "git",
+      "service_name": "ssdpd",
+      "unified_daemon": false,
+      "compile": [
+        "make -C ssdpd/src clean",
+        "make -C ssdpd/src upnpdm.so"
+      ],
+      "post_install": [
+        "cp -f /opt/dev/iopsys/ssdpd/src/upnpdm.so /usr/share/bbfdm/micro_services/ssdpd.so",
+        "cp -f /opt/dev/iopsys/ssdpd/bbfdm_service.json /etc/bbfdm/services/ssdpd.json"
+      ]
+    },
+    {
       "repo": "https://dev.iopsys.eu/system/sysmngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "sysmngr",
       "unified_daemon": true,
       "daemon_name": "/usr/sbin/sysmngr",
@@ -40,7 +84,6 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/icwmp.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "icwmp",
       "unified_daemon": false,
       "compile": [
@@ -57,7 +100,6 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/wifidmd.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "wifidmd",
       "unified_daemon": true,
       "daemon_name": "/usr/sbin/wifidmd",
@@ -74,7 +116,6 @@
     {
       "repo": "https://dev.iopsys.eu/hal/ethmngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "ethmngr",
       "unified_daemon": true,
       "daemon_name": "/usr/sbin/ethmngr",
@@ -91,7 +132,6 @@
     {
       "repo": "https://dev.iopsys.eu/network/netmngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "netmngr",
       "compile": [
         "apt install iproute2 -y",
@@ -106,7 +146,6 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/tr143d.git",
       "proto": "git",
-      "version": "devel",
       "compile": [
         "make -C src clean",
         "make -C src"
@@ -120,7 +159,6 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/tr471d.git",
       "proto": "git",
-      "version": "devel",
       "compile": [
         "make -C src clean",
         "make -C src"
@@ -133,7 +171,6 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/twamp-light.git",
       "proto": "git",
-      "version": "devel",
       "compile": [
         "make clean",
         "make"
@@ -146,7 +183,6 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/udpecho.git",
       "proto": "git",
-      "version": "devel",
       "compile": [
         "make -C src/ clean",
         "make -C src/"
@@ -159,7 +195,6 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/bulkdata.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "bulkdata",
       "unified_daemon": true,
       "daemon_name": "/usr/sbin/bulkdatad",
@@ -175,7 +210,6 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/xmppc.git",
       "proto": "git",
-      "version": "devel",
       "compile": [
         "apt install libstrophe-dev -y",
         "make -C src clean",
@@ -189,7 +223,6 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/stunc.git",
       "proto": "git",
-      "version": "devel",
       "compile": [
         "make -C src clean",
         "make -C src"
@@ -202,7 +235,6 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/periodicstats.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "periodicstats",
       "unified_daemon": true,
       "daemon_name": "/usr/sbin/periodicstatsd",
@@ -216,48 +248,8 @@
       ]
     },
     {
-      "repo": "https://dev.iopsys.eu/feed/iopsys.git",
-      "proto": "git",
-      "version": "devel",
-      "service_name": "ponmngr",
-      "unified_daemon": false,
-      "post_install": [
-        "cp -f /opt/dev/iopsys/ponmngr/files/etc/ponmngr/xpon.json /usr/share/bbfdm/micro_services/ponmngr.json",
-        "cp -f /opt/dev/iopsys/ponmngr/bbfdm_service.json /etc/bbfdm/services/ponmngr.json"
-      ]
-    },
-    {
-      "repo": "https://dev.iopsys.eu/feed/iopsys.git",
-      "proto": "git",
-      "version": "devel",
-      "compile": [
-        "make -C self-diagnostics/src clean",
-        "make -C self-diagnostics/src"
-      ],
-      "post_install": [
-        "mkdir -p /usr/share/bbfdm/micro_services/core",
-        "cp -f /opt/dev/iopsys/self-diagnostics/src/libselftest.so /usr/share/bbfdm/micro_services/core"
-      ]
-    },
-    {
-      "repo": "https://dev.iopsys.eu/feed/iopsys.git",
-      "proto": "git",
-      "version": "devel",
-      "service_name": "ssdpd",
-      "unified_daemon": false,
-      "compile": [
-        "make -C ssdpd/src clean",
-        "make -C ssdpd/src upnpdm.so"
-      ],
-      "post_install": [
-        "cp -f /opt/dev/iopsys/ssdpd/src/upnpdm.so /usr/share/bbfdm/micro_services/ssdpd.so",
-        "cp -f /opt/dev/iopsys/ssdpd/bbfdm_service.json /etc/bbfdm/services/ssdpd.json"
-      ]
-    },
-    {
       "repo": "https://dev.iopsys.eu/lcm/swmodd.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "swmodd",
       "unified_daemon": false,
       "compile": [
@@ -273,7 +265,6 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/usermngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "usermngr",
       "unified_daemon": true,
       "daemon_name": "/usr/sbin/usermngr",
@@ -289,7 +280,6 @@
     {
       "repo": "https://dev.iopsys.eu/network/parental-control.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "parentalcontrol",
       "unified_daemon": true,
       "daemon_name": "/usr/sbin/urlfilter",
@@ -307,7 +297,6 @@
     {
       "repo": "https://dev.iopsys.eu/iopsys/hostmngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "hostmngr",
       "unified_daemon": false,
       "dm_info_file": "src/bbf_plugin/datamodel_description.json",
@@ -326,7 +315,6 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/timemngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "timemngr",
       "unified_daemon": true,
       "daemon_name": "/usr/sbin/timemngr",
@@ -345,7 +333,6 @@
     {
       "repo": "https://dev.iopsys.eu/network/dnsmngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "dnsmngr",
       "unified_daemon": false,
       "compile": [
@@ -362,7 +349,6 @@
     {
       "repo": "https://dev.iopsys.eu/network/dhcpmngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "dhcpmngr",
       "unified_daemon": false,
       "compile": [
@@ -377,7 +363,6 @@
     {
       "repo": "https://dev.iopsys.eu/hal/qosmngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "qosmngr",
       "unified_daemon": true,
       "daemon_name": "/usr/sbin/qosmngr",
@@ -394,9 +379,7 @@
     {
       "repo": "https://dev.iopsys.eu/system/logmngr.git",
       "proto": "git",
-      "version": "devel",
       "unified_daemon": false,
-      "daemon_name": "/usr/sbin/qosmngr",
       "compile": [
         "make -C bbf_plugin clean",
         "make -C bbf_plugin"
@@ -412,7 +395,6 @@
     {
       "repo": "https://dev.iopsys.eu/voice/tr104.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "tr104",
       "unified_daemon": false,
       "dm_info_file": "libdm/extensions/iowrt/datamodel_description.json",
@@ -432,7 +414,6 @@
     {
       "repo": "https://dev.iopsys.eu/hal/mcastmngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "mcastmngr",
       "unified_daemon": false,
       "dm_info_file": "bbf_plugin/datamodel_description.json",
@@ -448,7 +429,6 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/packet-capture-diagnostics.git",
       "proto": "git",
-      "version": "devel",
       "unified_daemon": false,
       "compile": [
         "make -C src clean",
@@ -462,7 +442,6 @@
     {
       "repo": "https://dev.iopsys.eu/multi-ap/ieee1905.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "ieee1905",
       "unified_daemon": false,
       "dm_info_file": "../iopsys/ieee1905/files/datamodel_description.json",
@@ -478,7 +457,6 @@
     {
       "repo": "https://dev.iopsys.eu/network/bridgemngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "bridgemngr",
       "unified_daemon": false,
       "dm_info_file": "src/driver_vlan_backend/datamodel_description.json",
@@ -497,7 +475,6 @@
     {
       "repo": "https://dev.iopsys.eu/feed/openwrt-packages.git",
       "proto": "git",
-      "version": "devel",
       "post_install": [
         "mkdir -p /usr/share/bbfdm/micro_services/core",
         "cp -f net/openvpn/files/bbfdm/OpenVPN_DM.json /usr/share/bbfdm/micro_services/core",
@@ -508,7 +485,6 @@
     {
       "repo": "https://dev.iopsys.eu/network/ddnsmngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "ddnsmngr",
       "unified_daemon": false,
       "compile": [
@@ -523,7 +499,6 @@
     {
       "repo": "https://dev.iopsys.eu/network/sshmngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "sshmngr",
       "unified_daemon": false,
       "compile": [
@@ -538,7 +513,6 @@
     {
       "repo": "https://dev.iopsys.eu/network/firewallmngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "firewallmngr",
       "unified_daemon": false,
       "compile": [
@@ -553,7 +527,6 @@
     {
       "repo": "https://dev.iopsys.eu/hal/dslmngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "dslmngr",
       "unified_daemon": false,
       "compile": [
@@ -568,7 +541,6 @@
     {
       "repo": "https://dev.iopsys.eu/system/usbmngr.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "usbmngr",
       "unified_daemon": false,
       "compile": [
@@ -583,7 +555,6 @@
     {
       "repo": "https://dev.iopsys.eu/bbf/obuspa.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "obuspa",
       "unified_daemon": false,
       "compile": [
@@ -596,21 +567,8 @@
       ]
     },
     {
-      "repo": "https://dev.iopsys.eu/feed/iopsys.git",
-      "proto": "git",
-      "version": "devel",
-      "dm_info_file": "netmode/files/datamodel.json",
-      "service_name": "netmode",
-      "unified_daemon": false,
-      "post_install": [
-        "sed 's/{BBF_VENDOR_PREFIX}/X_IOWRT_EU_/g' netmode/files/datamodel.json > /usr/share/bbfdm/micro_services/netmode.json",
-        "sed 's/{BBF_VENDOR_PREFIX}/X_IOWRT_EU_/g' netmode/bbfdm_service.json > /etc/bbfdm/services/netmode.json"
-      ]
-    },
-    {
       "repo": "https://dev.iopsys.eu/bbf/gateway-info.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "gateway-info",
       "unified_daemon": false,
       "compile": [
@@ -625,7 +583,6 @@
     {
       "repo": "https://dev.iopsys.eu/feed/gnx.git",
       "proto": "git",
-      "version": "devel",
       "dm_info_file": "package/gnx-files-ftth/bbf_plugin/link_forwarding.json",
       "post_install": [
         "mkdir -p /usr/share/bbfdm/micro_services/ethmngr",
@@ -635,7 +592,6 @@
     {
       "repo": "https://dev.iopsys.eu/feed/gnx.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "gnx-ux-manager",
       "unified_daemon": false,
       "compile": [
@@ -651,7 +607,6 @@
     {
       "repo": "https://dev.iopsys.eu/feed/gnx.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "gnx-catv",
       "unified_daemon": false,
       "dm_info_file": "genexis-packages/gnx-catv/datamodel/datamodel_description.json",
@@ -667,7 +622,6 @@
     {
       "repo": "https://dev.iopsys.eu/feed/gnx.git",
       "proto": "git",
-      "version": "devel",
       "dm_info_file": "genexis-packages/easywifi/files/wifi_extn.json",
       "post_install": [
         "mkdir -p /usr/share/bbfdm/micro_services/wifidmd",
@@ -677,7 +631,6 @@
     {
       "repo": "https://dev.iopsys.eu/feed/gnx.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "dhcp-on-boarding",
       "unified_daemon": false,
       "dm_info_file": "genexis-packages/dhcp-on-boarding/src/datamodel_description.json",
@@ -693,7 +646,6 @@
     {
       "repo": "https://dev.iopsys.eu/feed/gnx.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "gnx-loop-detector",
       "unified_daemon": false,
       "dm_info_file": "genexis-packages/gnx-loop-detector/datamodel/datamodel_description.json",
@@ -709,7 +661,6 @@
     {
       "repo": "https://dev.iopsys.eu/feed/gnx.git",
       "proto": "git",
-      "version": "devel",
       "service_name": "gnx-sfp",
       "unified_daemon": false,
       "dm_info_file": "genexis-packages/gnx-sfp/src/bbf_plugin/datamodel_description.json",
