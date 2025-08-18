@@ -29,13 +29,6 @@ struct bbfdm_context {
 	struct list_head event_handlers;
 };
 
-struct ev_handler_node {
-	char *dm_path;
-	char *ev_name;
-	struct ubus_event_handler *ev_handler;
-	struct list_head list;
-};
-
 typedef struct bbfdm_data {
 	struct ubus_context *ctx;
 	struct ubus_request_data *req;
