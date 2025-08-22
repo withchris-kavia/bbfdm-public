@@ -117,7 +117,7 @@ int bbf_fault_map(struct dmctx *ctx, int fault)
 			out_fault = USP_FAULT_INVALID_TYPE;
 			break;
 		case FAULT_9007:
-			bbfdm_set_fault_message(ctx, "%s", get_fault_message(USP_FAULT_PARAM_READ_ONLY));
+			bbfdm_set_fault_message(ctx, "%s", get_fault_message(USP_FAULT_INVALID_VALUE));
 			out_fault = USP_FAULT_INVALID_VALUE;
 			break;
 		case FAULT_9008:
