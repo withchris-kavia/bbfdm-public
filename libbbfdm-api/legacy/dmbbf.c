@@ -615,10 +615,10 @@ int get_number_of_entries(struct dmctx *ctx, void *data, char *instance, int (*b
 		for (int idx = 0; idx < count - 1; idx++) {
 
 			int i = 0;
-			bool is_instance = false;
+			bool is_instance = true;
 			while (parts[idx][i] != 0) {
-				if (isdigit(parts[idx][i]) != 0) {
-					is_instance = true;
+				if (isdigit(parts[idx][i]) == false) {
+					is_instance = false;
 					break;
 				}
 				i++;
