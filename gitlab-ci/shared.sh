@@ -139,10 +139,9 @@ function install_libeasy()
 	(
 
 		cd ${BBFDM_PLUGIN_DEST}/libeasy
+		exec_cmd cmake -DCMAKE_INSTALL_PREFIX=/usr .
 		exec_cmd make
-		sudo mkdir -p /usr/include/easy
-		sudo cp -a libeasy*.so* /usr/lib
-		sudo cp -a *.h /usr/include/easy/
+		exec_cmd make install
 	)
 }
 
