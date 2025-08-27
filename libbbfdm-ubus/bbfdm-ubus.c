@@ -779,12 +779,19 @@ int bbfdm_print_data_model_schema(struct bbfdm_context *bbfdm_ctx, const enum bb
 
 int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
 {
-	int err = 0;
+	int err = 0, cur_log_mask=0;
 
 	err = ubus_connect_ctx(&bbfdm_ctx->ubus_ctx, NULL);
 	if (err != UBUS_STATUS_OK) {
 		BBF_ERR("Failed to connect to ubus");
 		return -5;  // Error code -5 indicating that ubus_ctx is not connected
+	}
+
+	// Set the logmask with default, if not already set by api
+	cur_log_mask = setlogmask(0);
+	if (cur_log_mask == 0xff) {
+		BBF_INFO("Log level not set, setting default value %d", LOG_ERR);
+		bbfdm_ubus_set_log_level(LOG_ERR);
 	}
 
 	uloop_init();
