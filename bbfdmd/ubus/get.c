@@ -314,7 +314,7 @@ static void append_response_data(struct ubus_request_tracker *tracker, struct bl
 static void handle_request_timeout(struct uloop_timeout *timeout)
 {
 	struct ubus_request_tracker *tracker = container_of(timeout, struct ubus_request_tracker, timeout);
-	BBFDM_ERR("Timeout occurred for request: '%s %s'", tracker->request_name, tracker->ctx->requested_path);
+	BBFDM_WARNING("Timeout occurred for request: '%s %s'", tracker->request_name, tracker->ctx->requested_path);
 
 	ubus_abort_request(tracker->ctx->ubus_ctx, &tracker->async_request);
 	tracker->ctx->pending_requests--;
@@ -330,7 +330,7 @@ static void handle_request_timeout(struct uloop_timeout *timeout)
 	}
 
 	if (tracker->ctx->pending_requests == 0 && tracker->ctx->service_list_processed) {
-		BBFDM_ERR("All requests completed after timeout");
+		BBFDM_WARNING("All requests completed after timeout");
 		send_response(tracker->ctx);
 	}
 
@@ -379,7 +379,7 @@ void run_async_call(struct async_request_context *ctx, service_entry_t *service,
 	}
 
 	if (ubus_lookup_id(ctx->ubus_ctx, service->name, &id)) {
-		BBFDM_ERR("Failed to lookup object: %s", service->name);
+		BBFDM_INFO("Failed to lookup object: %s", service->name);
 		return;
 	}
 
@@ -413,7 +413,7 @@ void run_async_call(struct async_request_context *ctx, service_entry_t *service,
 	}
 
 	if (ubus_invoke_async(ctx->ubus_ctx, id, ctx->ubus_method, req_buf.head, &tracker->async_request)) {
-		BBFDM_ERR("Failed to invoke async method for object: %s", tracker->request_name);
+		BBFDM_WARNING("Failed to invoke async method for object: %s", tracker->request_name);
 		uloop_timeout_cancel(&tracker->timeout);
 		BBFDM_FREE(tracker);
 	} else {

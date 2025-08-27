@@ -56,7 +56,7 @@ static void service_request_timeout(struct uloop_timeout *timeout)
 		return;
 	}
 
-	BBFDM_ERR("Timeout occurred for request: '%s get'", tracker->service ? tracker->service->name : "unknown");
+	BBFDM_WARNING("Timeout occurred for request: '%s get'", tracker->service ? tracker->service->name : "unknown");
 	ubus_abort_request(tracker->ubus_ctx, &tracker->async_request);
 	BBFDM_FREE(tracker);
 }
@@ -89,12 +89,12 @@ static void verify_service(struct ubus_context *ubus_ctx, service_entry_t *servi
 	uint32_t id = 0;
 
 	if (!ubus_ctx || !service || !service->name) {
-		BBFDM_ERR("Invalid arguments");
+		BBFDM_WARNING("Invalid arguments");
 		return;
 	}
 
 	if (ubus_lookup_id(ubus_ctx, service->name, &id)) {
-		BBFDM_ERR("Failed to lookup object: %s", service->name);
+		BBFDM_INFO("Failed to lookup object: %s", service->name);
 		return;
 	}
 
@@ -116,7 +116,7 @@ static void verify_service(struct ubus_context *ubus_ctx, service_entry_t *servi
 	blobmsg_add_string(&req_buf, "path", BBFDM_ROOT_OBJECT);
 
 	if (ubus_invoke_async(ubus_ctx, id, "get", req_buf.head, &tracker->async_request)) {
-		BBFDM_ERR("Failed to invoke async method for object: '%s get'", service->name);
+		BBFDM_WARNING("Failed to invoke async method for object: '%s get'", service->name);
 		uloop_timeout_cancel(&tracker->timeout);
 		BBFDM_FREE(tracker);
 	} else {
@@ -169,7 +169,7 @@ static void bbfdm_ubus_add_event_cb(struct ubus_context *ctx, struct ubus_event_
 
 	if (path && strncmp(path, BBFDM_UBUS_OBJECT".", strlen(BBFDM_UBUS_OBJECT) + 1) == 0) {
 
-		BBFDM_ERR("Detected new service registration: '%s'", path);
+		BBFDM_INFO("Detected new service registration: '%s'", path);
 
 		list_for_each_entry(service, &registered_services, list) {
 			// Check if the service is present in the registred services list
@@ -178,13 +178,13 @@ static void bbfdm_ubus_add_event_cb(struct ubus_context *ctx, struct ubus_event_
 				service->consecutive_timeouts = 0;
 				service_found = true;
 				fill_service_schema(ctx, 5000, service->name, &service->dm_schema);
-				BBFDM_ERR("Service '%s' found in registry. Resetting blacklist and timeout counters.", path);
+				BBFDM_INFO("Service '%s' found in registry. Resetting blacklist and timeout counters.", path);
 				break;
 			}
 		}
 
 		if (!service_found) {
-			BBFDM_ERR("Newly registered service '%s' is not recognized in the registry."
+			BBFDM_WARNING("Newly registered service '%s' is not recognized in the registry."
 					  " Possible missing configuration JSON file under '%s'.",
 					  path, BBFDM_MICROSERVICE_INPUT_PATH);
 		}
@@ -261,12 +261,12 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 	bool raw_format = false;
 
 	if (blobmsg_parse(bbfdm_policy, __BBFDM_MAX, tb, blob_data(msg), blob_len(msg))) {
-		BBFDM_ERR("Failed to parse input message");
+		BBFDM_WARNING("Failed to parse input message");
 		return UBUS_STATUS_UNKNOWN_ERROR;
 	}
 
 	if (!tb[BBFDM_PATH]) {
-		BBFDM_ERR("%s: path must be defined", method);
+		BBFDM_WARNING("%s: path must be defined", method);
 		return UBUS_STATUS_INVALID_ARGUMENT;
 	}
 
@@ -282,7 +282,7 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 
 	struct async_request_context *context = (struct async_request_context *)calloc(1, sizeof(struct async_request_context));
 	if (!context) {
-		BBFDM_ERR("Failed to allocate memory");
+		BBFDM_WARNING("Failed to allocate memory");
 		return UBUS_STATUS_UNKNOWN_ERROR;
 	}
 
@@ -329,12 +329,12 @@ static int bbfdm_handler_sync(struct ubus_context *ctx, struct ubus_object *obj,
 	struct blob_buf bb = {0};
 
 	if (blobmsg_parse(bbfdm_policy, __BBFDM_MAX, tb, blob_data(msg), blob_len(msg))) {
-		BBFDM_ERR("Failed to parse input message");
+		BBFDM_WARNING("Failed to parse input message");
 		return UBUS_STATUS_UNKNOWN_ERROR;
 	}
 
 	if (!tb[BBFDM_PATH]) {
-		BBFDM_ERR("%s: path must be defined", method);
+		BBFDM_WARNING("%s: path must be defined", method);
 		return UBUS_STATUS_INVALID_ARGUMENT;
 	}
 

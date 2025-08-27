@@ -123,13 +123,13 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 		return -1;
 	}
 
-    json_object *json_root = json_object_from_file(file_path);
-    if (!json_root) {
-        BBFDM_ERR("Failed to read JSON file: %s", file_path);
-        return -1;
-    }
+	json_object *json_root = json_object_from_file(file_path);
+	if (!json_root) {
+		BBFDM_ERR("Failed to read JSON file: %s", file_path);
+		return -1;
+	}
 
-    json_object *daemon_config = NULL;
+	json_object *daemon_config = NULL;
 	json_object_object_get_ex(json_root, "daemon", &daemon_config);
 	if (!daemon_config) {
 		BBFDM_ERR("Failed to find daemon object");
@@ -137,7 +137,7 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 		return -1;
 	}
 
-    json_object *enable_jobj = NULL;
+	json_object *enable_jobj = NULL;
 	json_object_object_get_ex(daemon_config, "enable", &enable_jobj);
 	bool enable = enable_jobj ? json_object_get_boolean(enable_jobj) : false;
 	if (!enable) {
@@ -172,7 +172,7 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 
 	size_t service_count = json_object_array_length(services_array);
 	if (service_count == 0) {
-		BBFDM_ERR("Skipping service '%s' due to no objects defined", service_name);
+		BBFDM_WARNING("Skipping service '%s' due to no objects defined", service_name);
 		json_object_put(json_root);
 		return -1;
 	}
@@ -196,7 +196,7 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 		snprintf(objects[num_objs].object_name, sizeof(objects[num_objs].object_name), "%s", object ? json_object_get_string(object) : "");
 
 		if (strlen(objects[num_objs].parent_path) == 0 || strlen(objects[num_objs].object_name) == 0) {
-			BBFDM_ERR("Skip empty registration parent_dm[%s] or object[%s]", objects[num_objs].parent_path, objects[num_objs].object_name);
+			BBFDM_WARNING("Skip empty registration parent_dm[%s] or object[%s]", objects[num_objs].parent_path, objects[num_objs].object_name);
 			continue;
 		}
 
