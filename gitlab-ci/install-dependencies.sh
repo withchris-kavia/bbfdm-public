@@ -18,6 +18,7 @@ rm -rf ${BBFDM_MS_DIR}/*
 rm -f ${BBFDM_MS_CONF}/*
 rm -f ${BBFDM_DMMAP_DIR}/*
 
+install_libeasy
 # compile and install Core Data Model as a micro-service
 install_libbbf ${1}
 
