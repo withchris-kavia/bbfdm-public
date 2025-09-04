@@ -20,33 +20,51 @@
 **************************************************************/
 static void _exec_reboot(const void *arg1, void *arg2)
 {
-	char config_name[16] = {0};
+	struct bbfdm_ctx d_ctx = {0};
+	struct blob_buf bb = {0};
 
-	snprintf(config_name, sizeof(config_name), "%s", "sysmngr");
+	bbfdm_init_ctx(&d_ctx);
+	memset(&bb, 0, sizeof(struct blob_buf));
+	blob_buf_init(&bb, 0);
 
 	// Set last_reboot_cause to 'RemoteReboot' because the upcoming reboot will be initiated by USP Operate
-	dmuci_set_value(config_name, "reboots", "last_reboot_cause", "RemoteReboot");
-	dmuci_commit_package(config_name);
-
+	bbfdm_uci_set(&d_ctx, "sysmngr", "reboots", "last_reboot_cause", "RemoteReboot");
+	bbfdm_uci_commit_package(&d_ctx, "sysmngr");
 	sleep(3);
-	dmubus_call_set("rpc-sys", "reboot", UBUS_ARGS{0}, 0);
+
+	bbfdm_ubus_invoke_sync(&d_ctx, "rpc-sys", "reboot", bb.head, 5000, NULL, NULL);
 	sleep(30); // Wait for reboot to happen
+
 	BBF_ERR("Reboot call failed with rpc-sys, trying again with system");
-	dmubus_call_set("system", "reboot", UBUS_ARGS{0}, 0);
+	bbfdm_ubus_invoke_sync(&d_ctx, "system", "reboot", bb.head, 5000, NULL, NULL);
 	sleep(30); // Wait for reboot
+
 	BBF_ERR("Reboot call failed!!!");
 
 	// Set last_reboot_cause to empty because there is a problem in the system reboot
-	dmuci_set_value(config_name, "reboots", "last_reboot_cause", "");
-	dmuci_commit_package(config_name);
+	bbfdm_uci_set(&d_ctx, "sysmngr", "reboots", "last_reboot_cause", "");
+	bbfdm_uci_commit_package(&d_ctx, "sysmngr");
+	bbfdm_free_ctx(&d_ctx);
+	blob_buf_free(&bb);
 }
 
 static void _exec_factoryreset(const void *arg1, void *arg2)
 {
+	struct bbfdm_ctx d_ctx = {0};
+	struct blob_buf bb = {0};
+
+	bbfdm_init_ctx(&d_ctx);
+	memset(&bb, 0, sizeof(struct blob_buf));
+	blob_buf_init(&bb, 0);
+
 	sleep(2);
-	dmubus_call_set("rpc-sys", "factory", UBUS_ARGS{0}, 0);
+	bbfdm_ubus_invoke_sync(&d_ctx, "rpc-sys", "factory", bb.head, 5000, NULL, NULL);
 	sleep(5); // Wait for reboot to happen
+
 	BBF_ERR("FactoryReset via rpc-sys failed, trying defaultreset");
+	bbfdm_free_ctx(&d_ctx);
+	blob_buf_free(&bb);
+
 	dmcmd_no_wait("/sbin/defaultreset", 0);
 	sleep(5); // Wait for reboot to happen
 	BBF_ERR("FactoryReset call failed!!!");

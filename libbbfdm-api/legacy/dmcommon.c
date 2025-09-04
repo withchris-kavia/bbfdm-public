@@ -430,12 +430,22 @@ void synchronize_specific_config_sections_with_dmmap(const char *package, const 
 	char *v = NULL;
 
 	uci_foreach_sections(package, section_type, s) {
+		char sec_name[64] = {0};
+
+		snprintf(sec_name, sizeof(sec_name), "%s_%s", section_type, section_name(s));
+
 		/*
 		 * create/update corresponding dmmap section that have same config_section link and using param_value_array
 		 */
 		if ((dmmap_sect = get_dup_section_in_dmmap(dmmap_package, section_type, section_name(s))) == NULL) {
 			dmuci_add_section_bbfdm(dmmap_package, section_type, &dmmap_sect);
+			dmuci_rename_section_by_section(dmmap_sect, sec_name);
 			dmuci_set_value_by_section_bbfdm(dmmap_sect, "section_name", section_name(s));
+		} else {
+			const char *reg_exp = "^cfg[0-9a-fA-F]{6}$";
+			if (match(section_name(dmmap_sect), reg_exp, 0, NULL) == true) {
+				dmuci_rename_section_by_section(dmmap_sect, sec_name);
+			}
 		}
 
 		/*
