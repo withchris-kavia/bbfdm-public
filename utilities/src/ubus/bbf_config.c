@@ -25,16 +25,7 @@
 #define DEFAULT_LOG_LEVEL LOG_INFO
 
 #define BBF_CONFIG_DAEMON_NAME "bbf_configd"
-#define CONFIG_CONFDIR "/etc/config/"
-#define DMMAP_CONFDIR "/etc/bbfdm/dmmap/"
 #define CRITICAL_DEF_JSON "/etc/bbfdm/critical_services.json"
-
-struct proto_args {
-	const char *name;
-	const char *config_savedir;
-	const char *dmmap_savedir;
-	unsigned char index;
-};
 
 // Structure to represent an instance of a service
 struct instance {
@@ -119,18 +110,6 @@ static void show_package_tree(struct config_package *packages)
 }
 #endif
 
-static struct proto_args supported_protocols[] = {
-		{
-				"both", "/tmp/bbfdm/.bbfdm/config/", "/tmp/bbfdm/.bbfdm/dmmap/", 0
-		},
-		{
-				"cwmp", "/tmp/bbfdm/.cwmp/config/", "/tmp/bbfdm/.cwmp/dmmap/", 1
-		},
-		{
-				"usp", "/tmp/bbfdm/.usp/config/", "/tmp/bbfdm/.usp/dmmap/", 2
-		},
-};
-
 static bool g_internal_commit = false;
 
 enum {
@@ -145,16 +124,6 @@ static const struct blobmsg_policy bbf_config_policy[] = {
 	[SERVICES_PROTO] = { .name = "proto", .type = BLOBMSG_TYPE_STRING },
 	[SERVICES_RELOAD] = { .name = "reload", .type = BLOBMSG_TYPE_BOOL },
 };
-
-static unsigned char get_idx_by_proto(const char *proto)
-{
-	for (int i = 0; i < ARRAY_SIZE(supported_protocols); i++) {
-		if (strcmp(supported_protocols[i].name, proto) == 0)
-			return supported_protocols[i].index;
-	}
-
-	return 0;
-}
 
 static int find_config_idx(struct config_package *package, const char *config_name)
 {
@@ -419,9 +388,13 @@ static bool validate_required_services(struct ubus_context *ctx, struct config_p
 	// Iterate through each service attribute
 	blobmsg_for_each_attr(service, services, rem) {
 		char *config_name = blobmsg_get_string(service);
+		char *p = strrchr(config_name, '/');
+		if (p) {
+			p = p + 1;
+		}
 
 		// Find the index of the configuration package
-		int idx = find_config_idx(package, config_name);
+		int idx = find_config_idx(package, p ? p : config_name);
 		if (idx < 0)
 			continue;
 
@@ -567,7 +540,7 @@ struct blob_attr *get_blob_attr_with_idx(int idx, struct blob_attr *msg)
 	struct blob_attr *params = NULL;
 	struct blob_attr *cur;
 	int rem;
-	const char *proto = supported_protocols[idx].name;
+	const char *proto = get_proto_name_by_idx(idx);
 
 	blobmsg_for_each_attr(cur, msg, rem) {
 		const char *name = blobmsg_name(cur);
@@ -588,7 +561,7 @@ static bool check_if_critical_service(int proto_idx, const char *sname)
 
 	services_ba = get_blob_attr_with_idx(proto_idx, g_critical_bb.head);
 	if (services_ba == NULL) {
-		ULOG_DEBUG("Critical service not defined for %s proto", supported_protocols[proto_idx].name);
+		ULOG_DEBUG("Critical service not defined for %s proto", get_proto_name_by_idx(proto_idx));
 		return is_critical;
 	}
 
@@ -600,7 +573,7 @@ static bool check_if_critical_service(int proto_idx, const char *sname)
 			break;
 		}
 	}
-	ULOG_DEBUG("Service %s, found %d, in %s critical list", sname, is_critical, supported_protocols[proto_idx].name);
+	ULOG_DEBUG("Service %s, found %d, in %s critical list", sname, is_critical, get_proto_name_by_idx(proto_idx));
 	return is_critical;
 }
 
@@ -676,11 +649,6 @@ static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_objec
 #endif
 	}
 
-	if (reload) {
-		ULOG_INFO("Applying changes to dmmap UCI config");
-		uci_apply_changes(DMMAP_CONFDIR, supported_protocols[idx].dmmap_savedir, true);
-	}
-
 	struct blob_attr *services = tb[SERVICES_NAME];
 
 	size_t arr_len = (services) ? blobmsg_len(services) : 0;
@@ -701,10 +669,12 @@ static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_objec
 		}
 
 		ULOG_INFO("Committing changes for specified services and reloading");
-		reload_specified_services(ctx, CONFIG_CONFDIR, supported_protocols[idx].config_savedir, async_req->services, true, reload, &wifi_config_flags);
+		reload_specified_services(ctx, idx, async_req->services, true, reload, &wifi_config_flags);
 	} else {
+		ULOG_INFO("Applying changes to dmmap UCI config");
+		uci_apply_changes(DMMAP_CONFDIR, idx, true); // commit dmmap changes
 		ULOG_INFO("Committing changes for all services and reloading");
-		reload_all_services(ctx, CONFIG_CONFDIR, supported_protocols[idx].config_savedir, true, reload, &wifi_config_flags);
+		reload_all_services(ctx, idx, true, reload, &wifi_config_flags);
 	}
 
 	if (wifi_config_flags) {
@@ -763,14 +733,13 @@ static int bbf_config_revert_handler(struct ubus_context *ctx, struct ubus_objec
 
 	if (arr_len) {
 		ULOG_INFO("Reverting specified services");
-		reload_specified_services(ctx, CONFIG_CONFDIR, supported_protocols[idx].config_savedir, services, false, false, NULL);
+		reload_specified_services(ctx, idx, services, false, false, NULL);
 	} else {
+		ULOG_INFO("Applying changes to dmmap UCI config");
+		uci_apply_changes(DMMAP_CONFDIR, idx, false); // revert dmmap changes
 		ULOG_INFO("Reverting all services");
-		reload_all_services(ctx, CONFIG_CONFDIR, supported_protocols[idx].config_savedir, false, false, NULL);
+		reload_all_services(ctx, idx, false, false, NULL);
 	}
-
-	ULOG_INFO("Applying changes to revert all UCI dmmap configurations");
-	uci_apply_changes(DMMAP_CONFDIR, supported_protocols[idx].dmmap_savedir, false);
 
 	ULOG_INFO("Sending success response");
 	send_reply(ctx, req, "status", "ok");
@@ -779,52 +748,6 @@ static int bbf_config_revert_handler(struct ubus_context *ctx, struct ubus_objec
 	send_bbf_config_change_event();
 
 	ULOG_INFO("revert handler exit");
-
-	return 0;
-}
-
-static int update_critical_services(int proto_idx, struct blob_buf *bb)
-{
-	struct blob_attr *services_ba = NULL;
-
-	services_ba = get_blob_attr_with_idx(proto_idx, g_critical_bb.head);
-	if (services_ba != NULL) {
-		blobmsg_add_field(bb, blobmsg_type(services_ba), "critical_services", blobmsg_data(services_ba), blobmsg_data_len(services_ba));
-	}
-
-	return 0;
-}
-
-static int bbf_config_changes_handler(struct ubus_context *ctx, struct ubus_object *obj __attribute__((unused)),
-		    struct ubus_request_data *req, const char *method __attribute__((unused)),
-		    struct blob_attr *msg)
-{
-	struct blob_attr *tb[__MAX];
-	struct blob_buf bb = {0};
-	unsigned char idx = 0;
-
-	memset(&bb, 0, sizeof(struct blob_buf));
-	blob_buf_init(&bb, 0);
-
-	if (blobmsg_parse(bbf_config_policy, __MAX, tb, blob_data(msg), blob_len(msg))) {
-		blobmsg_add_string(&bb, "error", "Failed to parse blob");
-		goto end;
-	}
-
-	if (tb[SERVICES_PROTO]) {
-		char *proto = blobmsg_get_string(tb[SERVICES_PROTO]);
-		idx = get_idx_by_proto(proto);
-	}
-
-	void *array = blobmsg_open_array(&bb, "configs");
-	uci_config_changes(CONFIG_CONFDIR, supported_protocols[idx].config_savedir, &bb);
-	blobmsg_close_array(&bb, array);
-
-	update_critical_services(idx, &bb);
-
-end:
-	ubus_send_reply(ctx, req, bb.head);
-	blob_buf_free(&bb);
 
 	return 0;
 }
@@ -845,7 +768,6 @@ static void receive_notify_event(struct ubus_context *ctx, struct ubus_event_han
 static const struct ubus_method bbf_config_methods[] = {
 	UBUS_METHOD("commit", bbf_config_commit_handler, bbf_config_policy),
 	UBUS_METHOD("revert", bbf_config_revert_handler, bbf_config_policy),
-	UBUS_METHOD("changes", bbf_config_changes_handler, bbf_config_policy),
 };
 
 static struct ubus_object_type bbf_config_object_type = UBUS_OBJECT_TYPE("bbf.config", bbf_config_methods);

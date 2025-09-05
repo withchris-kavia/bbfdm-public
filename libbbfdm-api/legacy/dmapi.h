@@ -212,6 +212,7 @@ struct dmctx {
 	struct uci_context *varstate_uci_ctx;
 	struct ubus_context *ubus_ctx;
 	struct list_head *memhead;
+	struct list_head *modified_uci_head;
 
 	const char *obj_buf[16];
 	const char *inst_buf[16];

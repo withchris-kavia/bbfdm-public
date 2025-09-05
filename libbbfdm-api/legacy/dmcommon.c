@@ -15,6 +15,8 @@
 
 #include "dmcommon.h"
 
+static struct dmctx *g_dm_ctx = NULL;
+
 char *DiagnosticsState[] = {"None", "Requested", "Canceled", "Complete", "Error", NULL};
 
 char *IPv4Address[] = {"^$", "^((25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])$", NULL};
@@ -2214,3 +2216,90 @@ int get_proto_type(const char *proto)
 
 	return type;
 }
+
+void dm_init_modified_uci(struct dmctx *ctx)
+{
+	if (ctx == NULL) {
+		BBFDM_DEBUG("dmctx is NULL!!!");
+		return;
+	}
+
+	ctx->modified_uci_head = calloc(1, sizeof(struct list_head));
+
+	// Check if memory allocation was successful
+	if (ctx->modified_uci_head == NULL) {
+		BBFDM_INFO("failed to allocate memory!!!");
+		return;
+	}
+
+	// Initialize the list head
+	INIT_LIST_HEAD(ctx->modified_uci_head);
+}
+
+void dm_clean_modified_uci(struct dmctx *ctx)
+{
+	if (ctx == NULL || ctx->modified_uci_head == NULL) {
+		return;
+	}
+
+	struct dm_modified_uci *dmm = NULL, *tmp = NULL;
+
+	list_for_each_entry_safe(dmm, tmp, ctx->modified_uci_head, list) {
+		list_del(&dmm->list);
+		FREE(dmm);
+	}
+
+	FREE(ctx->modified_uci_head);
+}
+
+void add_list_modified_uci(struct dmctx *ctx, const char *dir, const char *file)
+{
+	if (ctx == NULL) {
+		BBFDM_DEBUG("dmctx is NULL!");
+		return;
+	}
+
+	struct list_head *head = ctx->modified_uci_head;
+	if (head == NULL) {
+		BBFDM_INFO("head is NULL!");
+		return;
+	}
+
+	if (DM_STRLEN(dir) == 0 || DM_STRLEN(file) == 0) {
+		BBFDM_DEBUG("dir name or file name is empty!");
+		return;
+	}
+
+	char uci_file[128] = {0};
+	snprintf(uci_file, sizeof(uci_file), "%s%s", dir, file);
+
+	struct dm_modified_uci *m;
+	list_for_each_entry(m, head, list) {
+		if (DM_STRCMP(m->uci_file, uci_file) == 0) {
+			// config file already added in list
+			return;
+		}
+	}
+
+	m = malloc(sizeof(struct dm_modified_uci));
+	if (m == NULL) {
+		BBFDM_INFO("memory allocation failed");
+		return;
+	}
+
+	snprintf(m->uci_file, sizeof(m->uci_file), "%s", uci_file);
+
+	list_add(&m->list, head);
+}
+
+/* !! TO BE REMOVED LATER START */
+struct dmctx *get_bbfdm_global_dmctx(void)
+{
+	return g_dm_ctx;
+}
+
+void set_bbfdm_global_dmctx(struct dmctx *ctx)
+{
+	g_dm_ctx = ctx;
+}
+/* !! TO BE REMOVED LATER END */

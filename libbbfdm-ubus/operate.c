@@ -46,5 +46,27 @@ void bbfdm_operate_cmd(bbfdm_data_t *data, void *output)
 		ubus_send_reply(data->ctx, data->req, data->bbf_ctx.bb.head);
 	}
 
+	/* Commit or Revert changes in uci files */
+	if (data->bbf_ctx.modified_uci_head != NULL) {
+		struct dm_modified_uci *m;
+		struct blob_buf bb = {0};
+
+		blob_buf_init(&bb, 0);
+		void *array = blobmsg_open_array(&bb, "services");
+
+		list_for_each_entry(m, data->bbf_ctx.modified_uci_head, list) {
+			blobmsg_add_string(&bb, NULL, m->uci_file);
+		}
+
+		blobmsg_close_array(&bb, array);
+
+		blobmsg_add_string(&bb, "proto", (data->bbf_ctx.dm_type == BBFDM_USP) ? "usp" : "both");
+		blobmsg_add_u8(&bb, "reload", (fault == 0) ? true : false);
+
+		dmubus_call_blob_msg_timeout("bbf.config", (fault == 0) ? "commit" : "revert", &bb, 10000);
+
+		blob_buf_free(&bb);
+	}
+
 	bbf_cleanup(&data->bbf_ctx);
 }

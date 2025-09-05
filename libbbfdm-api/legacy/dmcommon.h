@@ -129,6 +129,11 @@ struct dhcp_options_type {
 	uint8_t len;
 };
 
+struct dm_modified_uci {
+	struct list_head list;
+	char uci_file[128];
+};
+
 pid_t get_pid(const char *pname);
 int compare_strings(const void *a, const void *b);
 char *get_uptime(void);
@@ -242,4 +247,10 @@ long download_file(char *file_path, const char *url, const char *username, const
 long upload_file(const char *file_path, const char *url, const char *username, const char *password);
 int get_proto_type(const char *proto);
 
+void dm_init_modified_uci(struct dmctx *ctx);
+void dm_clean_modified_uci(struct dmctx *ctx);
+void add_list_modified_uci(struct dmctx *ctx, const char *dir, const char *file);
+
+struct dmctx *get_bbfdm_global_dmctx(); // !! TO BE REMOVED LATER
+void set_bbfdm_global_dmctx(struct dmctx *ctx); // !! TO BE REMOVED LATER
 #endif

@@ -446,7 +446,6 @@ static int bbfdm_operate_handler(struct ubus_context *ctx, struct ubus_object *o
 
 static const struct blobmsg_policy dm_add_policy[] = {
 	[DM_ADD_PATH] = { .name = "path", .type = BLOBMSG_TYPE_STRING },
-	[DM_ADD_OBJ_PATH] = { .name = "obj_path", .type = BLOBMSG_TYPE_TABLE },
 	[DM_ADD_OPTIONAL] = { .name = "optional", .type = BLOBMSG_TYPE_TABLE },
 };
 
@@ -485,26 +484,6 @@ int bbfdm_add_handler(struct ubus_context *ctx, struct ubus_object *obj,
 	if (fault) {
 		BBF_ERR("Fault in add path |%s|", data.bbf_ctx.in_param);
 		goto end;
-	}
-
-	if (tb[DM_ADD_OBJ_PATH]) {
-		LIST_HEAD(pv_list);
-
-		snprintf(path, PATH_MAX, "%s%s.", (char *)blobmsg_data(tb[DM_ADD_PATH]), data.bbf_ctx.addobj_instance);
-
-		fault = fill_pvlist_set(path, NULL, NULL, tb[DM_ADD_OBJ_PATH], &pv_list);
-		if (fault) {
-			BBF_ERR("Fault in fill pvlist set path |%s|", path);
-			fill_err_code_array(&data, USP_FAULT_INTERNAL_ERROR);
-			free_pv_list(&pv_list);
-			goto end;
-		}
-
-		data.plist = &pv_list;
-
-		bbfdm_set_value(&data);
-
-		free_pv_list(&pv_list);
 	}
 
 end:

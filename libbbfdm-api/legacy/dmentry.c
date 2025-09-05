@@ -50,6 +50,7 @@ void bbf_ctx_init(struct dmctx *ctx, DMOBJ *tEntryObj)
 	dm_init_mem(ctx);
 	dm_uci_init(ctx);
 	dm_ubus_init(ctx);
+	dm_init_modified_uci(ctx);
 }
 
 void bbf_ctx_clean(struct dmctx *ctx)
@@ -59,6 +60,7 @@ void bbf_ctx_clean(struct dmctx *ctx)
 	dm_uci_exit(ctx);
 	dm_clean_mem(ctx);
 	dm_ubus_free(ctx);
+	dm_clean_modified_uci(ctx);
 }
 
 void bbf_ctx_init_sub(struct dmctx *ctx, DMOBJ *tEntryObj)
@@ -201,6 +203,8 @@ int bbf_entry_method(struct dmctx *ctx, int cmd)
 		return bbf_fault_map(ctx, FAULT_9005);
 	}
 
+	set_bbfdm_global_dmctx(ctx); // !! TO BE REMOVED LATER
+
 	switch(cmd) {
 	case BBF_GET_VALUE:
 		fault = dm_entry_get_value(ctx);
@@ -233,6 +237,8 @@ int bbf_entry_method(struct dmctx *ctx, int cmd)
 		fault = dm_entry_references_db(ctx);
 		break;
 	}
+
+	set_bbfdm_global_dmctx(NULL); // !! TO BE REMOVED LATER
 
 	return bbf_fault_map(ctx, fault);
 }

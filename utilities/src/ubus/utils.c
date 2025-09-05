@@ -16,6 +16,62 @@
 
 #define DEFAULT_UBUS_TIMEOUT 5000
 
+struct proto_args {
+	const char *name;
+	const char *config_savedir;
+	const char *dmmap_savedir;
+	unsigned char index;
+};
+
+static struct proto_args supported_protocols[] = {
+		{
+				"both", "/tmp/bbfdm/.bbfdm/config/", "/tmp/bbfdm/.bbfdm/dmmap/", 0
+		},
+		{
+				"cwmp", "/tmp/bbfdm/.cwmp/config/", "/tmp/bbfdm/.cwmp/dmmap/", 1
+		},
+		{
+				"usp", "/tmp/bbfdm/.usp/config/", "/tmp/bbfdm/.usp/dmmap/", 2
+		},
+};
+
+unsigned char get_idx_by_proto(const char *proto)
+{
+	for (int i = 0; i < ARRAY_SIZE(supported_protocols); i++) {
+		if (strcmp(supported_protocols[i].name, proto) == 0)
+			return supported_protocols[i].index;
+	}
+
+	return 0;
+}
+
+const char *get_proto_conf_savedir_by_idx(int idx)
+{
+	if (idx < ARRAY_SIZE(supported_protocols)) {
+		return supported_protocols[idx].config_savedir;
+	}
+
+	return "";
+}
+
+const char *get_proto_dmmap_savedir_by_idx(int idx)
+{
+	if (idx < ARRAY_SIZE(supported_protocols)) {
+		return supported_protocols[idx].dmmap_savedir;
+	}
+
+	return "";
+}
+
+const char *get_proto_name_by_idx(int idx)
+{
+	if (idx < ARRAY_SIZE(supported_protocols)) {
+		return supported_protocols[idx].name;
+	}
+
+	return "";
+}
+
 void strncpyt(char *dst, const char *src, size_t n)
 {
 	if (dst == NULL || src == NULL)
@@ -105,7 +161,8 @@ static void reload_service(struct ubus_context *ctx, const char *config_name, bo
 	blob_buf_free(&bb);
 }
 
-void reload_specified_services(struct ubus_context *ctx, const char *conf_dir, const char *save_dir, struct blob_attr *services,
+
+void reload_specified_services(struct ubus_context *ctx, int idx, struct blob_attr *services,
 		bool is_commit, bool reload, uint32_t *wifi_config_flags)
 {
 	struct uci_context *uci_ctx = NULL;
@@ -118,25 +175,42 @@ void reload_specified_services(struct ubus_context *ctx, const char *conf_dir, c
 		return;
 	}
 
-	if (conf_dir) {
-		ULOG_DEBUG("Setting UCI configuration directory to '%s'", conf_dir);
-		uci_set_confdir(uci_ctx, conf_dir);
-	}
-
-	if (save_dir) {
-		ULOG_DEBUG("Setting UCI save directory to '%s'", save_dir);
-		uci_set_savedir(uci_ctx, save_dir);
-	}
-
 	ULOG_DEBUG("Processing services list...");
 	blobmsg_for_each_attr(service, services, rem) {
 		struct uci_ptr ptr = {0};
+		char conf_dir[64] = {0};
+		char save_dir[64] = {0};
+		char package[64] = {0};
+		bool is_dmmap = false;
 
 		char *config_name = blobmsg_get_string(service);
+		if (strncmp(CONFIG_CONFDIR, config_name, strlen(CONFIG_CONFDIR)) == 0) {
+			/* standard uci path received */
+			snprintf(conf_dir, sizeof(conf_dir), "%s", CONFIG_CONFDIR);
+			snprintf(save_dir, sizeof(save_dir), "%s", get_proto_conf_savedir_by_idx(idx));
+			snprintf(package, sizeof(package), "%s", config_name + strlen(CONFIG_CONFDIR));
+		} else if (strncmp(DMMAP_CONFDIR, config_name, strlen(DMMAP_CONFDIR)) == 0) {
+			/* dmmap uci path received */
+			snprintf(conf_dir, sizeof(conf_dir), "%s", DMMAP_CONFDIR);
+			snprintf(save_dir, sizeof(save_dir), "%s", get_proto_dmmap_savedir_by_idx(idx));
+			snprintf(package, sizeof(package), "%s", config_name + strlen(DMMAP_CONFDIR));
+			is_dmmap = true;
+		} else {
+			/* no path default to standard uci */
+			snprintf(conf_dir, sizeof(conf_dir), "%s", CONFIG_CONFDIR);
+			snprintf(save_dir, sizeof(save_dir), "%s", get_proto_conf_savedir_by_idx(idx));
+			snprintf(package, sizeof(package), "%s", config_name);
+		}
+
+		ULOG_DEBUG("Setting UCI configuration directory to '%s'", conf_dir);
+		uci_set_confdir(uci_ctx, conf_dir);
+
+		ULOG_DEBUG("Setting UCI save directory to '%s'", save_dir);
+		uci_set_savedir(uci_ctx, save_dir);
 
 		ULOG_DEBUG("Looking up UCI configuration for service '%s'", config_name);
 
-		if (uci_lookup_ptr(uci_ctx, &ptr, config_name, true) != UCI_OK) {
+		if (uci_lookup_ptr(uci_ctx, &ptr, package, true) != UCI_OK) {
 			ULOG_ERR("Failed to lookup UCI pointer for service '%s'. Skipping", config_name);
 			continue;
 		}
@@ -155,12 +229,12 @@ void reload_specified_services(struct ubus_context *ctx, const char *conf_dir, c
 			}
 		}
 
-		if (reload) {
-			if (is_wifi_configs(config_name, wifi_config_flags))
+		if (reload && !is_dmmap) {
+			if (is_wifi_configs(package, wifi_config_flags))
 				continue;
 
-			ULOG_INFO("Reloading service '%s'", config_name);
-			reload_service(ctx, config_name, is_commit);
+			ULOG_INFO("Reloading service '%s'", package);
+			reload_service(ctx, package, is_commit);
 		}
 	}
 
@@ -168,8 +242,8 @@ void reload_specified_services(struct ubus_context *ctx, const char *conf_dir, c
 	uci_free_context(uci_ctx);
 }
 
-void reload_all_services(struct ubus_context *ctx, const char *conf_dir, const char *save_dir,
-		bool is_commit,  bool reload, uint32_t *wifi_config_flags)
+void reload_all_services(struct ubus_context *ctx, int idx, bool is_commit,
+		bool reload, uint32_t *wifi_config_flags)
 {
 	struct uci_context *uci_ctx = NULL;
 	char **configs = NULL, **p = NULL;
@@ -180,15 +254,12 @@ void reload_all_services(struct ubus_context *ctx, const char *conf_dir, const c
 		return;
 	}
 
-	if (conf_dir) {
-		ULOG_DEBUG("Setting UCI configuration directory to '%s'", conf_dir);
-		uci_set_confdir(uci_ctx, conf_dir);
-	}
+	ULOG_DEBUG("Setting UCI configuration directory to '%s'", CONFIG_CONFDIR);
+	uci_set_confdir(uci_ctx, CONFIG_CONFDIR);
 
-	if (save_dir) {
-		ULOG_DEBUG("Setting UCI save directory to '%s'", save_dir);
-		uci_set_savedir(uci_ctx, save_dir);
-	}
+	const char *save_dir = get_proto_conf_savedir_by_idx(idx);
+	ULOG_DEBUG("Setting UCI save directory to '%s'", save_dir);
+	uci_set_savedir(uci_ctx, save_dir);
 
 	if (uci_list_configs(uci_ctx, &configs) != UCI_OK) {
 		ULOG_ERR("Failed to list UCI configurations");
@@ -259,10 +330,11 @@ void wifi_reload_handler_script(uint32_t wifi_config_flags)
 	}
 }
 
-void uci_apply_changes(const char *conf_dir, const char *save_dir, bool is_commit)
+void uci_apply_changes(const char *conf_dir, int idx, bool is_commit)
 {
 	struct uci_context *uci_ctx = NULL;
 	char **configs = NULL, **p = NULL;
+	char save_dir[128] = {0};
 
 	uci_ctx = uci_alloc_context();
 	if (!uci_ctx) {
@@ -273,12 +345,16 @@ void uci_apply_changes(const char *conf_dir, const char *save_dir, bool is_commi
 	if (conf_dir) {
 		ULOG_DEBUG("Setting UCI configuration directory to '%s'", conf_dir);
 		uci_set_confdir(uci_ctx, conf_dir);
+
+		if (strcmp(conf_dir, DMMAP_CONFDIR) == 0) {
+			snprintf(save_dir, sizeof(save_dir), "%s", get_proto_dmmap_savedir_by_idx(idx));
+		} else if(strcmp(conf_dir, CONFIG_CONFDIR) == 0) {
+			snprintf(save_dir, sizeof(save_dir), "%s", get_proto_conf_savedir_by_idx(idx));
+		}
 	}
 
-	if (save_dir) {
-		ULOG_DEBUG("Setting UCI save directory to '%s'", save_dir);
-		uci_set_savedir(uci_ctx, save_dir);
-	}
+	ULOG_DEBUG("Setting UCI save directory to '%s'", save_dir);
+	uci_set_savedir(uci_ctx, save_dir);
 
 	if (uci_list_configs(uci_ctx, &configs) != UCI_OK) {
 		ULOG_ERR("Failed to list UCI configurations");
@@ -309,58 +385,6 @@ void uci_apply_changes(const char *conf_dir, const char *save_dir, bool is_commi
 				continue;
 			}
 		}
-	}
-
-	FREE(configs);
-
-exit:
-	uci_free_context(uci_ctx);
-}
-
-void uci_config_changes(const char *conf_dir, const char *save_dir, struct blob_buf *bb)
-{
-	struct uci_context *uci_ctx = NULL;
-	char **configs = NULL, **p = NULL;
-
-	uci_ctx = uci_alloc_context();
-	if (!uci_ctx) {
-		ULOG_ERR("Failed to allocate UCI context");
-		return;
-	}
-
-	if (conf_dir) {
-		ULOG_DEBUG("Setting UCI configuration directory to '%s'", conf_dir);
-		uci_set_confdir(uci_ctx, conf_dir);
-	}
-
-	if (save_dir) {
-		ULOG_DEBUG("Setting UCI save directory to '%s'", save_dir);
-		uci_set_savedir(uci_ctx, save_dir);
-	}
-
-	if (uci_list_configs(uci_ctx, &configs) != UCI_OK) {
-		ULOG_ERR("Failed to list UCI configurations");
-		goto exit;
-	}
-
-	ULOG_DEBUG("Identifying configurations with unsaved changes...");
-	for (p = configs; p && *p; p++) {
-		struct uci_ptr ptr = {0};
-
-		ULOG_DEBUG("Looking up UCI configuration for '%s'", *p);
-
-		if (uci_lookup_ptr(uci_ctx, &ptr, *p, true) != UCI_OK) {
-			ULOG_ERR("Failed to lookup UCI pointer for config '%s'. Skipping.", *p);
-			continue;
-		}
-
-		if (uci_list_empty(&ptr.p->saved_delta)) {
-			ULOG_DEBUG("No unsaved changes in config '%s'. Skipping", *p);
-			continue;
-		}
-
-		ULOG_INFO("Unsaved changes detected in config '%s', adding to blob buffer", *p);
-		blobmsg_add_string(bb, NULL, *p);
 	}
 
 	FREE(configs);
