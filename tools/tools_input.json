@@ -402,7 +402,8 @@
         "export CFLAGS=\"-I/usr/include/libbbfdm-api -Wall\"",
         "cmake -DBBF_VENDOR_PREFIX:String=X_IOWRT_EU_ -DTR104_EXTENSION_DIR:String=iowrt -DRUNAS_BBFDM_MICROSERVICE:BOOL=ON",
         "cd libdm",
-        "make"
+        "make",
+        "cd -"
       ],
       "post_install": [
         "cp -f libdm/tr104/libtr104.so /usr/share/bbfdm/micro_services/tr104.so",
@@ -583,10 +584,10 @@
     {
       "repo": "https://dev.iopsys.eu/feed/gnx.git",
       "proto": "git",
-      "dm_info_file": "package/gnx-files-ftth/bbf_plugin/link_forwarding.json",
+      "dm_info_file": "genexis-packages/link-state-forwarding/bbf_plugin/link_forwarding.json",
       "post_install": [
         "mkdir -p /usr/share/bbfdm/micro_services/ethmngr",
-        "sed 's/{BBF_VENDOR_PREFIX}/X_GENEXIS_EU_/g' package/gnx-files-ftth/bbf_plugin/link_forwarding.json > /usr/share/bbfdm/micro_services/ethmngr/link_forwarding.json"
+        "sed 's/{BBF_VENDOR_PREFIX}/X_GENEXIS_EU_/g' genexis-packages/link-state-forwarding/bbf_plugin/link_forwarding.json > /usr/share/bbfdm/micro_services/ethmngr/link_forwarding.json"
       ]
     },
     {
@@ -597,7 +598,8 @@
       "compile": [
         "cd genexis-packages/gnx-ux-manager",
         "cmake src/bbf_plugin -DCMAKE_INSTALL_PREFIX=/",
-        "make"
+        "make",
+        "cd -"
       ],
       "post_install": [
         "cp -f genexis-packages/gnx-ux-manager/libleddm.so /usr/share/bbfdm/micro_services/gnx-ux-manager.so",
@@ -612,7 +614,8 @@
       "dm_info_file": "genexis-packages/gnx-catv/datamodel/datamodel_description.json",
       "compile": [
         "cd genexis-packages/gnx-catv",
-        "make -C datamodel CFLAGS+='-DBBF_VENDOR_PREFIX=\\\"X_GENEXIS_EU_\\\"'"
+        "make -C datamodel CFLAGS+='-DBBF_VENDOR_PREFIX=\\\"X_GENEXIS_EU_\\\"'",
+        "cd -"
       ],
       "post_install": [
         "cp -f genexis-packages/gnx-catv/datamodel/libgnx-bbf-catv.so /usr/share/bbfdm/micro_services/gnx-catv.so",
@@ -636,7 +639,8 @@
       "dm_info_file": "genexis-packages/dhcp-on-boarding/src/datamodel_description.json",
       "compile": [
         "cd genexis-packages/dhcp-on-boarding",
-        "make -C src CFLAGS+='-DBBF_VENDOR_PREFIX=\\\"X_GENEXIS_EU_\\\"'"
+        "make -C src CFLAGS+='-DBBF_VENDOR_PREFIX=\\\"X_GENEXIS_EU_\\\"'",
+        "cd -"
       ],
       "post_install": [
         "cp -f genexis-packages/dhcp-on-boarding/src/lib_dhcp_onboarding.so /usr/share/bbfdm/micro_services/dhcp-on-boarding.so",
@@ -651,7 +655,8 @@
       "dm_info_file": "genexis-packages/gnx-loop-detector/datamodel/datamodel_description.json",
       "compile": [
         "cd genexis-packages/gnx-loop-detector",
-        "make -C datamodel CFLAGS+='-DBBF_VENDOR_PREFIX=\\\"X_GENEXIS_EU_\\\"'"
+        "make -C datamodel CFLAGS+='-DBBF_VENDOR_PREFIX=\\\"X_GENEXIS_EU_\\\"'",
+        "cd -"
       ],
       "post_install": [
         "cp -f genexis-packages/gnx-loop-detector/datamodel/libloopdetection.so /usr/share/bbfdm/micro_services/gnx-loop-detector.so",
@@ -667,7 +672,8 @@
       "compile": [
         "cd genexis-packages/gnx-sfp",
         "cmake src/bbf_plugin -DCMAKE_INSTALL_PREFIX=/ -DCMAKE_C_FLAGS='-DBBF_VENDOR_PREFIX=\\\"X_GENEXIS_EU_\\\"'",
-        "make"
+        "make",
+        "cd -"
       ],
       "post_install": [
         "cp -f genexis-packages/gnx-sfp/libopticaldm.so /usr/share/bbfdm/micro_services/gnx-sfp.so",
