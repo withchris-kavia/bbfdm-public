@@ -11,6 +11,7 @@
 #include <stdarg.h>
 #include <libubus.h>
 #include <uci.h>
+#include <sys/stat.h>
 
 #include "utils.h"
 
@@ -34,6 +35,136 @@ static struct proto_args supported_protocols[] = {
 				"usp", "/tmp/bbfdm/.usp/config/", "/tmp/bbfdm/.usp/dmmap/", 2
 		},
 };
+
+static void add_external_action_list(struct list_head *action_list, struct list_head *ext_handler, const char *file_path)
+{
+	if (file_path == NULL || strlen(file_path) == 0 || action_list == NULL)
+		return;
+
+	struct applier_node *app_node = NULL;
+	bool ext_exist = false;
+
+	char *config = strrchr(file_path, '/');
+	if (config) {
+		config = config + 1;
+	}
+
+	list_for_each_entry(app_node, ext_handler, list) {
+		if (strcmp(app_node->file_path, file_path) != 0) {
+			continue;
+		}
+
+		ext_exist = true;
+
+		bool node_exist = false;
+		bool arg_exist = false;
+		struct action_node *act_node = NULL;
+
+		list_for_each_entry(act_node, action_list, list) {
+			if (strcmp(app_node->action, act_node->action) == 0) {
+				node_exist = true;
+				for (int i = 0; i < act_node->idx; i++) {
+					if (strcmp(act_node->arg[i], config) == 0) {
+						arg_exist = true;
+						break;
+					}
+				}
+				break;
+			}
+		}
+
+		if (node_exist == false) {
+			act_node = (struct action_node *)calloc(1, sizeof(struct action_node));
+			if (act_node == NULL) {
+				ULOG_INFO("Failed to allocate memory for action list");
+				return;
+			}
+
+			snprintf(act_node->action, sizeof(act_node->action), "%s", app_node->action);
+			INIT_LIST_HEAD(&act_node->list);
+			list_add_tail(&act_node->list, action_list);
+		}
+
+		if (arg_exist == false && act_node->idx < ARG_COUNT) {
+			snprintf(act_node->arg[act_node->idx], ARG_LEN, "%s", config);
+			act_node->idx = act_node->idx + 1;
+			ULOG_DEBUG("Added %s handler for %s config", act_node->action, config);
+		}
+	}
+
+	if (ext_exist == true || strncmp(file_path, DMMAP_CONFDIR, strlen(DMMAP_CONFDIR)) == 0) {
+		/* external handler exist, so already added in list or
+		 * the file is a dmmap file so it has no default handler
+		 * to add in the action list */
+		return;
+	}
+
+	/* external handler not exist, add default handler */
+	struct action_node *act_node = NULL;
+	bool node_exist = false;
+	bool arg_exist = false;
+
+	list_for_each_entry(act_node, action_list, list) {
+		if (strcmp(app_node->action, DEFAULT_HANDLER_ACT) == 0) {
+			node_exist = true;
+			for (int i = 0; i < act_node->idx; i++) {
+				if (strcmp(act_node->arg[i], config) == 0) {
+					arg_exist = true;
+					break;
+				}
+			}
+			break;
+		}
+	}
+
+	if (node_exist == false) {
+		act_node = (struct action_node *)calloc(1, sizeof(struct action_node));
+		if (act_node == NULL) {
+			ULOG_INFO("Failed to allocate memory for action list");
+			return;
+		}
+
+		snprintf(act_node->action, sizeof(act_node->action), "%s", DEFAULT_HANDLER_ACT);
+		INIT_LIST_HEAD(&act_node->list);
+		list_add_tail(&act_node->list, action_list);
+	}
+
+	if (arg_exist == false && act_node->idx < ARG_COUNT) {
+		snprintf(act_node->arg[act_node->idx], ARG_LEN, "%s", config);
+		act_node->idx = act_node->idx + 1;
+		ULOG_DEBUG("Added default handler for %s config", config);
+	}
+}
+
+static void add_changed_uci_list(struct list_head *changed_uci, const char *file_path)
+{
+	if (changed_uci == NULL || file_path == NULL || strlen(file_path) == 0)
+		return;
+
+	struct modi_uci_node *node = NULL;
+	bool exist = false;
+
+	list_for_each_entry(node, changed_uci, list) {
+		if (!node->uci || strcmp(node->uci, file_path) != 0)
+			continue;
+
+		exist = true;
+		break;
+	}
+
+	if (exist)
+		return;
+
+	node = (struct modi_uci_node *)calloc(1, sizeof(struct modi_uci_node));
+	if (!node) {
+		ULOG_INFO("Failed to allocate memory for changed uci list");
+		return;
+	}
+
+	node->uci = strdup(file_path);
+	INIT_LIST_HEAD(&node->list);
+	list_add_tail(&node->list, changed_uci);
+}
 
 unsigned char get_idx_by_proto(const char *proto)
 {
@@ -93,24 +224,6 @@ bool file_exists(const char *path)
 	return stat(path, &buffer) == 0;
 }
 
-static bool is_wifi_configs(const char *config_name, uint32_t *wifi_config_flags)
-{
-	if (!config_name && !wifi_config_flags)
-		return false;
-
-	if (strcmp(config_name, "wireless") == 0) {
-		*wifi_config_flags |= WIRELESS_CONFIG;
-		return true;
-	}
-
-	if (strcmp(config_name, "mapcontroller") == 0) {
-		*wifi_config_flags |= MAPCONTROLLER_CONFIG;
-		return true;
-	}
-
-	return false;
-}
-
 int bbf_config_call(struct ubus_context *ctx, const char *object, const char *method, struct blob_buf *data, ubus_data_handler_t callback, void *arg)
 {
 	int fault = 0;
@@ -136,34 +249,9 @@ int bbf_config_call(struct ubus_context *ctx, const char *object, const char *me
 	return 0;
 }
 
-static void reload_service(struct ubus_context *ctx, const char *config_name, bool is_commit)
-{
-	struct blob_buf bb = {0};
-
-	if (!ctx || !config_name) {
-		ULOG_ERR("Failed to reload service: 'ctx' or 'config_name' is NULL");
-		return;
-	}
-
-	memset(&bb, 0, sizeof(struct blob_buf));
-
-	blob_buf_init(&bb, 0);
-
-	blobmsg_add_string(&bb, "config", config_name);
-
-	int result = bbf_config_call(ctx, "uci", (is_commit) ? "commit" : "revert", &bb, NULL, NULL);
-	if (result != 0) {
-		ULOG_ERR("Failed to %s configuration '%s'", (is_commit ? "commit" : "revert"), config_name);
-	} else {
-		ULOG_DEBUG("Successfully executed %s on configuration '%s'.", (is_commit ? "commit" : "revert"), config_name);
-	}
-
-	blob_buf_free(&bb);
-}
-
-
 void reload_specified_services(struct ubus_context *ctx, int idx, struct blob_attr *services,
-		bool is_commit, bool reload, uint32_t *wifi_config_flags)
+				bool is_commit, bool reload, struct list_head *action_list,
+				struct list_head *handler_list, struct list_head *changed_uci)
 {
 	struct uci_context *uci_ctx = NULL;
 	struct blob_attr *service = NULL;
@@ -210,6 +298,9 @@ void reload_specified_services(struct ubus_context *ctx, int idx, struct blob_at
 
 		ULOG_DEBUG("Looking up UCI configuration for service '%s'", config_name);
 
+		char file_path[1024] = {0};
+		snprintf(file_path, sizeof(file_path), "%s%s", conf_dir, package);
+
 		if (uci_lookup_ptr(uci_ctx, &ptr, package, true) != UCI_OK) {
 			ULOG_ERR("Failed to lookup UCI pointer for service '%s'. Skipping", config_name);
 			continue;
@@ -221,6 +312,10 @@ void reload_specified_services(struct ubus_context *ctx, int idx, struct blob_at
 				ULOG_ERR("Failed to commit UCI changes for service '%s'", config_name);
 				continue;
 			}
+
+			if (!is_dmmap) {
+				add_changed_uci_list(changed_uci, file_path);
+			}
 		} else {
 			ULOG_DEBUG("Reverting UCI changes for service '%s'", config_name);
 			if (uci_revert(uci_ctx, &ptr) != UCI_OK) {
@@ -229,12 +324,12 @@ void reload_specified_services(struct ubus_context *ctx, int idx, struct blob_at
 			}
 		}
 
-		if (reload && !is_dmmap) {
-			if (is_wifi_configs(package, wifi_config_flags))
-				continue;
+		if (is_commit && is_dmmap) {
+			add_external_action_list(action_list, handler_list, file_path);
+		}
 
-			ULOG_INFO("Reloading service '%s'", package);
-			reload_service(ctx, package, is_commit);
+		if (reload && !is_dmmap) {
+			add_external_action_list(action_list, handler_list, file_path);
 		}
 	}
 
@@ -243,7 +338,8 @@ void reload_specified_services(struct ubus_context *ctx, int idx, struct blob_at
 }
 
 void reload_all_services(struct ubus_context *ctx, int idx, bool is_commit,
-		bool reload, uint32_t *wifi_config_flags)
+			bool reload, struct list_head *action_list,
+			struct list_head *handler_list, struct list_head *changed_uci)
 {
 	struct uci_context *uci_ctx = NULL;
 	char **configs = NULL, **p = NULL;
@@ -271,6 +367,8 @@ void reload_all_services(struct ubus_context *ctx, int idx, bool is_commit,
 		struct uci_ptr ptr = {0};
 
 		ULOG_DEBUG("Looking up UCI configuration for '%s'", *p);
+		char file_path[1024] = {0};
+		snprintf(file_path, sizeof(file_path), "%s%s", CONFIG_CONFDIR, *p);
 
 		if (uci_lookup_ptr(uci_ctx, &ptr, *p, true) != UCI_OK) {
 			ULOG_ERR("Failed to lookup UCI pointer for config '%s'. Skipping", *p);
@@ -288,6 +386,8 @@ void reload_all_services(struct ubus_context *ctx, int idx, bool is_commit,
 				ULOG_ERR("Failed to commit changes for config '%s'", *p);
 				continue;
 			}
+
+			add_changed_uci_list(changed_uci, file_path);
 		} else {
 			ULOG_DEBUG("Reverting UCI changes for config '%s'", *p);
 			if (uci_revert(uci_ctx, &ptr) != UCI_OK) {
@@ -297,11 +397,7 @@ void reload_all_services(struct ubus_context *ctx, int idx, bool is_commit,
 		}
 
 		if (reload) {
-			if (is_wifi_configs(*p, wifi_config_flags))
-				continue;
-
-			ULOG_INFO("Reloading service for config '%s'", *p);
-			reload_service(ctx, *p, is_commit);
+			add_external_action_list(action_list, handler_list, file_path);
 		}
 	}
 
@@ -311,26 +407,15 @@ exit:
 	uci_free_context(uci_ctx);
 }
 
-void wifi_reload_handler_script(uint32_t wifi_config_flags)
+void exec_apply_handler_script(const char *cmd)
 {
-#define WIFI_CONFIG_RELOAD_SCRIPT "/etc/wifidmd/bbf_config_reload.sh"
-	char cmd[512] = {0};
-
-	if (!file_exists(WIFI_CONFIG_RELOAD_SCRIPT))
-		return;
-
-	snprintf(cmd, sizeof(cmd), "sh %s '{\"wireless\":\"%d\",\"mapcontroller\":\"%d\"}'",
-			WIFI_CONFIG_RELOAD_SCRIPT,
-			wifi_config_flags & WIRELESS_CONFIG ? 1 : 0,
-			wifi_config_flags & MAPCONTROLLER_CONFIG ? 1 : 0);
-
 	FILE *pp = popen(cmd, "r"); // flawfinder: ignore
 	if (pp) {
 		pclose(pp);
 	}
 }
 
-void uci_apply_changes(const char *conf_dir, int idx, bool is_commit)
+void uci_apply_changes_dmmap(int idx, bool is_commit, struct list_head *action_list, struct list_head *ext_handler)
 {
 	struct uci_context *uci_ctx = NULL;
 	char **configs = NULL, **p = NULL;
@@ -342,16 +427,9 @@ void uci_apply_changes(const char *conf_dir, int idx, bool is_commit)
 		return;
 	}
 
-	if (conf_dir) {
-		ULOG_DEBUG("Setting UCI configuration directory to '%s'", conf_dir);
-		uci_set_confdir(uci_ctx, conf_dir);
-
-		if (strcmp(conf_dir, DMMAP_CONFDIR) == 0) {
-			snprintf(save_dir, sizeof(save_dir), "%s", get_proto_dmmap_savedir_by_idx(idx));
-		} else if(strcmp(conf_dir, CONFIG_CONFDIR) == 0) {
-			snprintf(save_dir, sizeof(save_dir), "%s", get_proto_conf_savedir_by_idx(idx));
-		}
-	}
+	ULOG_DEBUG("Setting UCI configuration directory to '%s'", DMMAP_CONFDIR);
+	uci_set_confdir(uci_ctx, DMMAP_CONFDIR);
+	snprintf(save_dir, sizeof(save_dir), "%s", get_proto_dmmap_savedir_by_idx(idx));
 
 	ULOG_DEBUG("Setting UCI save directory to '%s'", save_dir);
 	uci_set_savedir(uci_ctx, save_dir);
@@ -378,6 +456,10 @@ void uci_apply_changes(const char *conf_dir, int idx, bool is_commit)
 				ULOG_ERR("Failed to commit changes for config '%s'", *p);
 				continue;
 			}
+
+			char file_path[1024] = {0};
+			snprintf(file_path, sizeof(file_path), "%s%s", DMMAP_CONFDIR, *p);
+			add_external_action_list(action_list, ext_handler, file_path);
 		} else {
 			ULOG_DEBUG("Reverting changes for config '%s'", *p);
 			if (uci_revert(uci_ctx, &ptr) != UCI_OK) {
@@ -391,4 +473,14 @@ void uci_apply_changes(const char *conf_dir, int idx, bool is_commit)
 
 exit:
 	uci_free_context(uci_ctx);
+}
+
+bool regular_file(const char *path)
+{
+	struct stat buffer;
+
+	if (!path)
+		return false;
+
+	return stat(path, &buffer) == 0 && S_ISREG(buffer.st_mode);
 }

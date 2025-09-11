@@ -31,6 +31,7 @@
 #include "plugin.h"
 
 #define BBFDM_DEFAULT_MICROSERVICE_MODULE_PATH "/usr/share/bbfdm/micro_services"
+#define BBFDM_SERVICE_CONFIG_PATH "/etc/bbfdm/services"
 
 // Global variables
 static void *deamon_lib_handle = NULL;
@@ -636,6 +637,118 @@ static int regiter_ubus_object(struct ubus_context *ctx)
 static void bbfdm_ctx_init(struct bbfdm_context *bbfdm_ctx)
 {
 	INIT_LIST_HEAD(&bbfdm_ctx->event_handlers);
+	INIT_LIST_HEAD(&bbfdm_ctx->config.apply_handlers);
+}
+
+static void free_apply_handlers(bbfdm_config_t *config)
+{
+	struct apply_handler_node *node = NULL, *tmp = NULL;
+
+	if (config == NULL)
+		return;
+
+	list_for_each_entry_safe(node, tmp, &config->apply_handlers, list) {
+		list_del(&node->list);
+		BBFDM_FREE(node->file_path);
+		BBFDM_FREE(node);
+	}
+}
+
+static int load_apply_handlers_from_file(bbfdm_config_t *config)
+{
+	char serv_config[MAX_DM_PATH] = {0};
+
+	if (config == NULL) {
+		BBF_ERR("bbfdm_config is null");
+		return -1;
+	}
+
+	snprintf(serv_config, sizeof(serv_config), "%s/%s.json", BBFDM_SERVICE_CONFIG_PATH, config->service_name);
+	if (!bbfdm_file_exists(serv_config) || !bbfdm_is_regular_file(serv_config)) {
+		BBF_ERR("Config file %s not exists for service %s", serv_config, config->service_name);
+		return 0;
+	}
+
+	json_object *json_root = json_object_from_file(serv_config);
+	if (!json_root) {
+		BBF_ERR("Failed to read json file %s", serv_config);
+		return -1;
+	}
+
+	json_object *daemon_config = NULL;
+	json_object_object_get_ex(json_root, "daemon", &daemon_config);
+	if (!daemon_config) {
+		BBFDM_ERR("Failed to find daemon object");
+		json_object_put(json_root);
+		return -1;
+	}
+
+	json_object *apply_handler = NULL;
+	json_object_object_get_ex(daemon_config, "apply_handler", &apply_handler);
+	if (!apply_handler) {
+		json_object_put(json_root);
+		return 0;
+	}
+
+	char type[2][8] = { "dmmap", "uci" };
+
+	for (int i = 0; i < 2; i++) {
+		json_object *array = NULL;
+
+		if (!json_object_object_get_ex(apply_handler, type[i], &array) ||
+		    json_object_get_type(array) != json_type_array) {
+			continue;
+		}
+
+		size_t count = json_object_array_length(array);
+		for (size_t j = 0; j < count; j++) {
+			json_object *hndl_obj = json_object_array_get_idx(array, j);
+			json_object *files = NULL;
+
+			json_object_object_get_ex(hndl_obj, "file", &files);
+			if (!files || json_object_get_type(files) != json_type_array) {
+				continue;
+			}
+
+			size_t f_count = json_object_array_length(files);
+			for (size_t k = 0; k < f_count; k++) {
+				char path[MAX_DM_PATH] = {0};
+
+				json_object *f_inst = json_object_array_get_idx(files, k);
+				snprintf(path, sizeof(path), "/etc/%s/%s",
+					(strcmp(type[i], "uci") == 0) ? "config" : "bbfdm/dmmap", json_object_get_string(f_inst));
+
+				// check if already present
+				bool exist = false;
+				struct apply_handler_node *node = NULL;
+				list_for_each_entry(node, &config->apply_handlers, list) {
+					if (DM_STRCMP(node->file_path, path) == 0) {
+						exist = true;
+						break;
+					}
+				}
+
+				if (exist == true)
+					continue;
+
+				node = (struct apply_handler_node *)calloc(1, sizeof(struct apply_handler_node));
+				if (node == NULL) {
+					BBFDM_ERR("Failed to allocate memory for apply handlers");
+					free_apply_handlers(config);
+					json_object_put(json_root);
+					return -1;
+				}
+
+				INIT_LIST_HEAD(&node->list);
+				list_add_tail(&node->list, &config->apply_handlers);
+
+				node->file_path = strdup(path);
+			}
+		}
+	}
+
+	json_object_put(json_root);
+	return 0;
 }
 
 static int load_micro_service_config(bbfdm_config_t *config)
@@ -644,6 +757,11 @@ static int load_micro_service_config(bbfdm_config_t *config)
 
 	if (!config || strlen(config->service_name) == 0) {
 		BBF_ERR("Invalid input options for service name");
+		return -1;
+	}
+
+	if (load_apply_handlers_from_file(config) != 0) {
+		BBF_ERR("Failed to load handlers from service file");
 		return -1;
 	}
 
@@ -709,6 +827,8 @@ int bbfdm_print_data_model_schema(struct bbfdm_context *bbfdm_ctx, const enum bb
 	};
 	int err = 0;
 
+	bbfdm_ctx_init(bbfdm_ctx);
+
 	err = load_micro_service_config(&bbfdm_ctx->config);
 	if (err) {
 		fprintf(stderr, "Failed to load micro-service config\n");
@@ -752,8 +872,84 @@ int bbfdm_print_data_model_schema(struct bbfdm_context *bbfdm_ctx, const enum bb
 
 	bbf_cleanup(&bbf_ctx);
 
+	free_apply_handlers(&bbfdm_ctx->config);
+
 	bbfdm_ctx_cleanup(bbfdm_ctx);
 	return err;
+}
+
+static void perform_uci_sync_op(struct uloop_timeout *timeout)
+{
+	DM_MAP_OBJ *dynamic_obj = INTERNAL_ROOT_TREE;
+
+	if (dynamic_obj == NULL)
+		return;
+
+	for (int i = 0; dynamic_obj[i].path; i++) {
+		if (dynamic_obj[i].uci_sync_handler) {
+			dynamic_obj[i].uci_sync_handler();
+		}
+	}
+}
+
+static void bbfdm_apply_event_cb(struct ubus_context *ctx __attribute__((unused)),
+			struct ubus_event_handler *ev,
+			const char *type __attribute__((unused)),
+			struct blob_attr *msg)
+{
+	if (!msg)
+		return;
+
+	struct bbfdm_context *bbfdm_ctx = container_of(ev, struct bbfdm_context, apply_event);
+	if (bbfdm_ctx == NULL)
+		return;
+
+	bbfdm_config_t *config = &bbfdm_ctx->config;
+
+	const struct blobmsg_policy p[2] = {
+		{ "proto", BLOBMSG_TYPE_STRING },
+		{ "uci_changed", BLOBMSG_TYPE_ARRAY }
+	};
+
+	struct blob_attr *tb[2] = {NULL, NULL};
+	blobmsg_parse(p, 2, tb, blob_data(msg), blob_len(msg));
+
+	if (!tb[0] || !tb[1])
+		return;
+
+	const char *proto = blobmsg_get_string(tb[0]);
+	struct blob_attr *attr = NULL;
+	int rem = 0;
+
+	blobmsg_for_each_attr(attr, tb[1], rem) {
+		char *conf_name = blobmsg_get_string(attr);
+
+		/* Now check if the config file is intended file */
+		struct apply_handler_node *node = NULL;
+
+		list_for_each_entry(node, &config->apply_handlers, list) {
+			if (DM_STRCMP(node->file_path, conf_name) != 0)
+				continue;
+
+			BBF_INFO("Scheduling UCI sync operation for changes performed by %s", proto);
+			memset(&bbfdm_ctx->sync_timer, 0, sizeof(struct uloop_timeout));
+			bbfdm_ctx->sync_timer.cb = perform_uci_sync_op;
+			uloop_timeout_set(&bbfdm_ctx->sync_timer, 10);
+
+			return;
+		}
+	}
+}
+
+static void register_bbfdm_apply_event(struct bbfdm_context *bbfdm_ctx)
+{
+	if (bbfdm_ctx == NULL)
+		return;
+
+	memset(&bbfdm_ctx->apply_event, 0, sizeof(struct ubus_event_handler));
+	bbfdm_ctx->apply_event.cb = bbfdm_apply_event_cb;
+
+	ubus_register_event_handler(&bbfdm_ctx->ubus_ctx, &bbfdm_ctx->apply_event, "bbfdm.apply");
 }
 
 int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
@@ -800,11 +996,15 @@ int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
 		return -1;
 	}
 
+	register_bbfdm_apply_event(bbfdm_ctx);
+
 	return register_events_to_ubus(&bbfdm_ctx->ubus_ctx, &bbfdm_ctx->event_handlers);
 }
 
 int bbfdm_ubus_regiter_free(struct bbfdm_context *bbfdm_ctx)
 {
+	free_apply_handlers(&bbfdm_ctx->config);
+	ubus_unregister_event_handler(&bbfdm_ctx->ubus_ctx, &bbfdm_ctx->apply_event);
 	free_ubus_event_handler(&bbfdm_ctx->ubus_ctx, &bbfdm_ctx->event_handlers);
 	bbfdm_ctx_cleanup(bbfdm_ctx);
 	uloop_done();

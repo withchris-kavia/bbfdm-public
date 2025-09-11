@@ -16,7 +16,13 @@ struct bbfdm_async_req {
 	void *result;
 };
 
+struct apply_handler_node {
+	char *file_path;
+	struct list_head list;
+};
+
 typedef struct bbfdm_config {
+	struct list_head apply_handlers;
 	char service_name[32]; // Service name for micro-service identification
 	char in_name[128]; // Service plugin path
 	char in_plugin_dir[128];  // Service extra/internal plugin directory path
@@ -25,8 +31,10 @@ typedef struct bbfdm_config {
 
 struct bbfdm_context {
 	bbfdm_config_t config;
+	struct ubus_event_handler apply_event;
 	struct ubus_context ubus_ctx;
 	struct list_head event_handlers;
+	struct uloop_timeout sync_timer;
 };
 
 typedef struct bbfdm_data {

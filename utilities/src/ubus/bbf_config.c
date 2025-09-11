@@ -14,6 +14,8 @@
 #include <libubox/blobmsg_json.h>
 #include <libubox/uloop.h>
 #include <libubus.h>
+#include <json-c/json.h>
+#include <dirent.h>
 
 #include "utils.h"
 
@@ -26,6 +28,7 @@
 
 #define BBF_CONFIG_DAEMON_NAME "bbf_configd"
 #define CRITICAL_DEF_JSON "/etc/bbfdm/critical_services.json"
+#define BBFDM_MICROSERVICE_INPUT_PATH "/etc/bbfdm/services"
 
 // Structure to represent an instance of a service
 struct instance {
@@ -48,14 +51,17 @@ struct config_package {
 };
 
 struct bbf_config_async_req {
+	int idx;
 	struct ubus_context *ctx;
 	struct ubus_request_data req;
 	struct uloop_timeout timeout;
 	struct blob_attr *services;
 	struct config_package package[MAX_PACKAGE_NUM];
+	struct list_head changed_uci_list;
 };
 
 static struct blob_buf g_critical_bb;
+static struct list_head g_apply_handlers;
 
 #ifdef BBF_CONFIG_DEBUG
 static void log_instance(struct instance *inst)
@@ -475,6 +481,48 @@ static void send_bbf_config_change_event()
 	ubus_free(ctx);
 }
 
+static void send_bbf_apply_event(int idx, struct list_head *changed_uci_list)
+{
+	if (changed_uci_list == NULL || list_empty(changed_uci_list))
+		return;
+
+	struct ubus_context *ctx;
+	struct blob_buf bb = {0};
+	struct modi_uci_node *node = NULL, *tmp = NULL;
+
+	memset(&bb, 0, sizeof(struct blob_buf));
+	blob_buf_init(&bb, 0);
+
+	blobmsg_add_string(&bb, "proto", get_proto_name_by_idx(idx));
+	void *array = blobmsg_open_array(&bb, "uci_changed");
+	list_for_each_entry_safe(node, tmp, changed_uci_list, list) {
+		if (node->uci == NULL) {
+			list_del(&node->list);
+			FREE(node);
+			continue;
+		}
+
+		blobmsg_add_string(&bb, NULL, node->uci);
+		list_del(&node->list);
+		FREE(node->uci);
+		FREE(node);
+	}
+	blobmsg_close_array(&bb, array);
+
+	ctx = ubus_connect(NULL);
+	if (ctx == NULL) {
+		ULOG_ERR("Can't create UBUS context for 'bbfdm.apply' event");
+		blob_buf_free(&bb);
+		return;
+	}
+
+	ULOG_INFO("Sending bbfdm.apply event");
+
+	ubus_send_event(ctx, "bbfdm.apply", bb.head);
+	blob_buf_free(&bb);
+	ubus_free(ctx);
+}
+
 static void send_reply(struct ubus_context *ctx, struct ubus_request_data *req, const char *message, const char *description)
 {
 	struct blob_buf bb = {0};
@@ -498,12 +546,13 @@ static void complete_deferred_request(struct bbf_config_async_req *async_req)
 	// Complete the deferred request and send the response
 	ubus_complete_deferred_request(async_req->ctx, &async_req->req, 0);
 
+	// Send 'bbf.config.change' event to run refresh instances
+	send_bbf_config_change_event();
+	send_bbf_apply_event(async_req->idx, &async_req->changed_uci_list);
+
 	// Free the allocated memory
 	FREE(async_req->services);
 	FREE(async_req);
-
-	// Send 'bbf.config.change' event to run refresh instances
-	send_bbf_config_change_event();
 
 	// Set internal commit to false
 	g_internal_commit = false;
@@ -607,9 +656,11 @@ static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_objec
 	struct blob_attr *tb[__MAX];
 	bool monitor = false, reload = true;
 	unsigned char idx = 0;
-	uint32_t wifi_config_flags = 0;
+	struct list_head action_list;
+	struct list_head *changed_uci;
 
 	ULOG_INFO("Commit handler called");
+	INIT_LIST_HEAD(&action_list);
 
 	if (blobmsg_parse(bbf_config_policy, __MAX, tb, blob_data(msg), blob_len(msg))) {
 		send_reply(ctx, req, "error", "Failed to parse blob");
@@ -621,6 +672,9 @@ static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_objec
 		send_reply(ctx, req, "error", "Failed to allocate bbf config async request");
 		return -1;
 	}
+
+	changed_uci = &async_req->changed_uci_list;
+	INIT_LIST_HEAD(changed_uci);
 
 	// Set internal commit to true
 	g_internal_commit = true;
@@ -669,21 +723,42 @@ static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_objec
 		}
 
 		ULOG_INFO("Committing changes for specified services and reloading");
-		reload_specified_services(ctx, idx, async_req->services, true, reload, &wifi_config_flags);
+		reload_specified_services(ctx, idx, async_req->services, true, reload, &action_list,
+					  &g_apply_handlers, changed_uci);
 	} else {
 		ULOG_INFO("Applying changes to dmmap UCI config");
-		uci_apply_changes(DMMAP_CONFDIR, idx, true); // commit dmmap changes
+		uci_apply_changes_dmmap(idx, true, &action_list, &g_apply_handlers);
 		ULOG_INFO("Committing changes for all services and reloading");
-		reload_all_services(ctx, idx, true, reload, &wifi_config_flags);
+		reload_all_services(ctx, idx, true, reload, &action_list, &g_apply_handlers, changed_uci);
 	}
 
-	if (wifi_config_flags) {
-		ULOG_ERR("Reloading changes for wifi services");
-		wifi_reload_handler_script(wifi_config_flags);
+	struct action_node *node = NULL, *tmp = NULL;
+	list_for_each_entry_safe(node, tmp, &action_list, list) {
+		char cmd[4096] = {0};
+		unsigned pos = 0;
+
+		ULOG_INFO("Reloading changes");
+
+		if (!file_exists(node->action)) {
+			list_del(&node->list);
+			FREE(node);
+			continue;
+		}
+
+		pos += snprintf(cmd, sizeof(cmd), "sh %s", node->action);
+
+		for (int i = 0; i < node->idx; i++) {
+			pos += snprintf(&cmd[pos], sizeof(cmd) - pos, " %s", node->arg[i]);
+		}
+
+		exec_apply_handler_script(cmd);
+		list_del(&node->list);
+		FREE(node);
 	}
 
 	if (monitor) {
 		ULOG_INFO("Deferring request and setting up async completion");
+		async_req->idx = idx;
 		ubus_defer_request(ctx, req, &async_req->req);
 		async_req->timeout.cb = complete_request_callback;
 		uloop_timeout_set(&async_req->timeout, 2000);
@@ -691,12 +766,13 @@ static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_objec
 		ULOG_INFO("Sending immediate success response");
 		send_reply(ctx, req, "status", "ok");
 
+		// Send 'bbf.config.change' event to run refresh instances
+		send_bbf_config_change_event();
+		send_bbf_apply_event(idx, changed_uci);
+
 		// Free the allocated memory
 		FREE(async_req->services);
 		FREE(async_req);
-
-		// Send 'bbf.config.change' event to run refresh instances
-		send_bbf_config_change_event();
 
 		// Set internal commit to false
 		g_internal_commit = false;
@@ -733,12 +809,12 @@ static int bbf_config_revert_handler(struct ubus_context *ctx, struct ubus_objec
 
 	if (arr_len) {
 		ULOG_INFO("Reverting specified services");
-		reload_specified_services(ctx, idx, services, false, false, NULL);
+		reload_specified_services(ctx, idx, services, false, false, NULL, NULL, NULL);
 	} else {
-		ULOG_INFO("Applying changes to dmmap UCI config");
-		uci_apply_changes(DMMAP_CONFDIR, idx, false); // revert dmmap changes
+		ULOG_INFO("Reverting changes to dmmap UCI config");
+		uci_apply_changes_dmmap(idx, false, NULL, NULL); // revert dmmap changes
 		ULOG_INFO("Reverting all services");
-		reload_all_services(ctx, idx, false, false, NULL);
+		reload_all_services(ctx, idx, false, false, NULL, NULL, NULL);
 	}
 
 	ULOG_INFO("Sending success response");
@@ -796,6 +872,164 @@ static void load_critical_services()
 	blobmsg_add_json_from_file(&g_critical_bb, CRITICAL_DEF_JSON);
 }
 
+static int filter(const struct dirent *entry)
+{
+	return entry->d_name[0] != '.';
+}
+
+static int compare(const struct dirent **a, const struct dirent **b)
+{
+	size_t len_a = strlen((*a)->d_name);
+	size_t len_b = strlen((*b)->d_name);
+
+	if (len_a < len_b) // Sort by length (shorter first)
+		return -1;
+
+	if (len_a > len_b)
+		return 1;
+
+	return strcasecmp((*a)->d_name, (*b)->d_name); // If lengths are equal, sort alphabetically
+}
+
+static void free_apply_handlers()
+{
+	struct applier_node *node = NULL, *tmp = NULL;
+
+	list_for_each_entry_safe(node, tmp, &g_apply_handlers, list) {
+		list_del(&node->list);
+		FREE(node->file_path);
+		FREE(node->action);
+		FREE(node);
+	}
+}
+
+static void __load_handlers(const char *file)
+{
+	if (file == NULL || strlen(file) == 0)
+		return;
+
+	json_object *json_root = json_object_from_file(file);
+	if (!json_root) {
+		ULOG_INFO("Failed to read json file %s", file);
+		return;
+	}
+
+	json_object *daemon_config = NULL;
+	json_object_object_get_ex(json_root, "daemon", &daemon_config);
+	if (!daemon_config) {
+		ULOG_INFO("Failed to find daemon object");
+		json_object_put(json_root);
+		return;
+	}
+
+	json_object *apply_handler = NULL;
+	json_object_object_get_ex(daemon_config, "apply_handler", &apply_handler);
+	if (!apply_handler) {
+		json_object_put(json_root);
+		return;
+	}
+
+	char type[2][8] = { "dmmap", "uci" };
+
+	for (int i = 0; i < 2; i++) {
+		json_object *array = NULL;
+
+		if (!json_object_object_get_ex(apply_handler, type[i], &array) ||
+		    json_object_get_type(array) != json_type_array) {
+			continue;
+		}
+
+		size_t count = json_object_array_length(array);
+		for (size_t j = 0; j < count; j++) {
+			json_object *hndl_obj = json_object_array_get_idx(array, j);
+			json_object *files = NULL, *handler = NULL;
+
+			json_object_object_get_ex(hndl_obj, "external_handler", &handler);
+			if (!handler) {
+				continue;
+			}
+
+			const char *action = json_object_get_string(handler);
+			if (strlen(action) == 0 || !file_exists(action)) {
+				continue;
+			}
+
+			json_object_object_get_ex(hndl_obj, "file", &files);
+			if (!files || json_object_get_type(files) != json_type_array) {
+				continue;
+			}
+
+			size_t f_count = json_object_array_length(files);
+			for (size_t k = 0; k < f_count; k++) {
+				char path[1024] = {0};
+
+				json_object *f_inst = json_object_array_get_idx(files, k);
+				snprintf(path, sizeof(path), "/etc/%s/%s",
+					(strcmp(type[i], "uci") == 0) ? "config" : "bbfdm/dmmap", json_object_get_string(f_inst));
+
+
+				// check if already present
+				bool exist = false;
+				struct applier_node *node = NULL;
+				list_for_each_entry(node, &g_apply_handlers, list) {
+					if (strcmp(node->file_path, path) == 0 && strcmp(node->action, action) == 0) {
+						exist = true;
+						break;
+					}
+				}
+
+				if (exist == true)
+					continue;
+
+				node = (struct applier_node *)calloc(1, sizeof(struct applier_node));
+				if (node == NULL) {
+					ULOG_INFO("Failed to allocate memory for apply handlers");
+					json_object_put(json_root);
+					return;
+				}
+
+				INIT_LIST_HEAD(&node->list);
+				list_add_tail(&node->list, &g_apply_handlers);
+
+				node->file_path = strdup(path);
+				node->action = strdup(action);
+			}
+		}
+	}
+
+	json_object_put(json_root);
+	return;
+}
+
+static void load_apply_handlers()
+{
+	struct dirent **namelist;
+
+	INIT_LIST_HEAD(&g_apply_handlers);
+
+	int num_files = scandir(BBFDM_MICROSERVICE_INPUT_PATH, &namelist, filter, compare);
+
+	for (int i = 0; i < num_files; i++) {
+		char file_path[512] = {0};
+
+		snprintf(file_path, sizeof(file_path), "%s/%s", BBFDM_MICROSERVICE_INPUT_PATH, namelist[i]->d_name);
+
+		if (!file_exists(file_path) || !regular_file(file_path)) {
+			free(namelist[i]);
+			continue;
+		}
+
+		__load_handlers(file_path);
+
+		free(namelist[i]);
+	}
+
+	if (namelist)
+		free(namelist);
+
+	return;
+}
+
 int main(int argc, char **argv)
 {
 	struct ubus_event_handler ev = {
@@ -835,6 +1069,7 @@ int main(int argc, char **argv)
 	ubus_add_uloop(uctx);
 
 	load_critical_services();
+	load_apply_handlers();
 
 	if (ubus_add_object(uctx, &bbf_config_object)) {
 		ULOG_ERR("Failed to add 'bbf.config' ubus object");
@@ -849,6 +1084,7 @@ int main(int argc, char **argv)
 	uloop_run();
 
 exit:
+	free_apply_handlers();
 	blob_buf_free(&g_critical_bb);
 	uloop_done();
 	ubus_free(uctx);
