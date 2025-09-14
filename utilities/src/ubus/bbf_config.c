@@ -30,6 +30,8 @@
 #define CRITICAL_DEF_JSON "/etc/bbfdm/critical_services.json"
 #define BBFDM_MICROSERVICE_INPUT_PATH "/etc/bbfdm/services"
 
+static struct list_head g_external_changed_uci;
+
 // Structure to represent an instance of a service
 struct instance {
 	char name[NAME_LENGTH];
@@ -461,28 +463,10 @@ wait:
 	return false;
 }
 
-static void send_bbf_config_change_event()
-{
-	struct ubus_context *ctx;
-	struct blob_buf bb = {0};
-
-	ctx = ubus_connect(NULL);
-	if (ctx == NULL) {
-		ULOG_ERR("Can't create UBUS context for 'bbf.config.change' event");
-		return;
-	}
-
-	ULOG_INFO("Sending bbf.config.change event");
-
-	memset(&bb, 0, sizeof(struct blob_buf));
-	blob_buf_init(&bb, 0);
-	ubus_send_event(ctx, "bbf.config.change", bb.head);
-	blob_buf_free(&bb);
-	ubus_free(ctx);
-}
-
 static void send_bbf_apply_event(int idx, struct list_head *changed_uci_list)
 {
+	char protocol[16] = {0};
+
 	if (changed_uci_list == NULL || list_empty(changed_uci_list))
 		return;
 
@@ -493,7 +477,9 @@ static void send_bbf_apply_event(int idx, struct list_head *changed_uci_list)
 	memset(&bb, 0, sizeof(struct blob_buf));
 	blob_buf_init(&bb, 0);
 
-	blobmsg_add_string(&bb, "proto", get_proto_name_by_idx(idx));
+	snprintf(protocol, sizeof(protocol), "%s", (idx == -1) ? "external" : get_proto_name_by_idx(idx));
+
+	blobmsg_add_string(&bb, "proto", protocol);
 	void *array = blobmsg_open_array(&bb, "uci_changed");
 	list_for_each_entry_safe(node, tmp, changed_uci_list, list) {
 		if (node->uci == NULL) {
@@ -546,8 +532,22 @@ static void complete_deferred_request(struct bbf_config_async_req *async_req)
 	// Complete the deferred request and send the response
 	ubus_complete_deferred_request(async_req->ctx, &async_req->req, 0);
 
-	// Send 'bbf.config.change' event to run refresh instances
-	send_bbf_config_change_event();
+	// If any uci is changed externally then add it in bbf.apply event
+	struct modi_uci_node *node = NULL, *tmp = NULL;
+	list_for_each_entry_safe(node, tmp, &g_external_changed_uci, list) {
+		if (node->uci == NULL) {
+			list_del(&node->list);
+			FREE(node);
+			continue;
+		}
+
+		add_changed_uci_list(&async_req->changed_uci_list, node->uci);
+		list_del(&node->list);
+		FREE(node->uci);
+		FREE(node);
+	}
+
+	// Send 'bbf.apply' event
 	send_bbf_apply_event(async_req->idx, &async_req->changed_uci_list);
 
 	// Free the allocated memory
@@ -766,8 +766,7 @@ static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_objec
 		ULOG_INFO("Sending immediate success response");
 		send_reply(ctx, req, "status", "ok");
 
-		// Send 'bbf.config.change' event to run refresh instances
-		send_bbf_config_change_event();
+		// Send 'bbf.apply' event
 		send_bbf_apply_event(idx, changed_uci);
 
 		// Free the allocated memory
@@ -820,25 +819,59 @@ static int bbf_config_revert_handler(struct ubus_context *ctx, struct ubus_objec
 	ULOG_INFO("Sending success response");
 	send_reply(ctx, req, "status", "ok");
 
-	// Send 'bbf.config.change' event to run refresh instances
-	send_bbf_config_change_event();
-
 	ULOG_INFO("revert handler exit");
 
 	return 0;
 }
 
+static void free_changed_uci_list(struct list_head *uci_list)
+{
+	struct modi_uci_node *node = NULL, *tmp = NULL;
+
+	if (uci_list == NULL)
+		return;
+
+	list_for_each_entry_safe(node, tmp, uci_list, list) {
+		list_del(&node->list);
+		FREE(node->uci);
+		FREE(node);
+	}
+}
+
 static void receive_notify_event(struct ubus_context *ctx, struct ubus_event_handler *ev,
 			  const char *type, struct blob_attr *msg)
 {
-	// Skip sending 'bbf.config.change' event if triggered by an internal commit
+	char file_path[1024] = {0};
+
+	struct blob_attr *tb[1] = {0};
+	const struct blobmsg_policy p[1] = {
+		{ "config", BLOBMSG_TYPE_STRING }
+	};
+
+	blobmsg_parse(p, 1, tb, blob_data(msg), blob_len(msg));
+
+	if (!tb[0])
+		return;
+
+	char *config = blobmsg_get_string(tb[0]);
+	snprintf(file_path, sizeof(file_path), "/etc/config/%s", config);
+
 	if (g_internal_commit) {
-		ULOG_DEBUG("Event triggered by internal commit; skipping 'bbf.config.change' event transmission");
+		ULOG_DEBUG("internal commit in progress, add uci in global list");
+		add_changed_uci_list(&g_external_changed_uci, file_path);
 		return;
 	}
 
-	// Trigger 'bbf.config.change' event to refresh instances as required
-	send_bbf_config_change_event();
+	// Trigger 'bbfdm.apply' event
+	struct list_head uci_list;
+
+	INIT_LIST_HEAD(&uci_list);
+	add_changed_uci_list(&uci_list, file_path);
+
+	send_bbf_apply_event(-1, &uci_list);
+	free_changed_uci_list(&uci_list);
+
+	return;
 }
 
 static const struct ubus_method bbf_config_methods[] = {
@@ -1071,6 +1104,8 @@ int main(int argc, char **argv)
 	load_critical_services();
 	load_apply_handlers();
 
+	INIT_LIST_HEAD(&g_external_changed_uci);
+
 	if (ubus_add_object(uctx, &bbf_config_object)) {
 		ULOG_ERR("Failed to add 'bbf.config' ubus object");
 		goto exit;
@@ -1085,6 +1120,7 @@ int main(int argc, char **argv)
 
 exit:
 	free_apply_handlers();
+	free_changed_uci_list(&g_external_changed_uci);
 	blob_buf_free(&g_critical_bb);
 	uloop_done();
 	ubus_free(uctx);

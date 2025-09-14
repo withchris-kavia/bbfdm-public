@@ -136,7 +136,7 @@ static void add_external_action_list(struct list_head *action_list, struct list_
 	}
 }
 
-static void add_changed_uci_list(struct list_head *changed_uci, const char *file_path)
+void add_changed_uci_list(struct list_head *changed_uci, const char *file_path)
 {
 	if (changed_uci == NULL || file_path == NULL || strlen(file_path) == 0)
 		return;

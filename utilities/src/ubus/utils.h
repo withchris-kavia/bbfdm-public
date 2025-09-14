@@ -78,5 +78,6 @@ const char *get_proto_dmmap_savedir_by_idx(int idx);
 const char *get_proto_name_by_idx(int idx);
 bool file_exists(const char *path);
 bool regular_file(const char *path);
+void add_changed_uci_list(struct list_head *changed_uci, const char *file_path);
 
 #endif //__UTILS_H__

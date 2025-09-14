@@ -890,6 +890,15 @@ static void perform_uci_sync_op(struct uloop_timeout *timeout)
 			dynamic_obj[i].uci_sync_handler();
 		}
 	}
+
+	struct bbfdm_context *bbfdm_ctx = container_of(timeout, struct bbfdm_context, sync_timer);
+	if (bbfdm_ctx == NULL)
+		return;
+
+	if (bbfdm_refresh_references(BBFDM_BOTH, bbfdm_ctx->config.out_name)) {
+		BBF_ERR("Failed to refresh instance data base");
+		return;
+	}
 }
 
 static void bbfdm_apply_event_cb(struct ubus_context *ctx __attribute__((unused)),
