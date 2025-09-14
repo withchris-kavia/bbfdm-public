@@ -701,7 +701,7 @@ static void dmubus_schedule_blacklisted_ubus_recovery(void)
 		}
 	}
 
-	BBF_DEBUG("Next blacklisted ubus recovery scheduled in %d msecs", next_check_time);
+	BBF_DEBUG("Pid %d, Next blacklisted ubus recovery scheduled in %d msecs", getpid(), next_check_time);
 	uloop_timeout_set(&blacklisted_ubus_recovery_timer, next_check_time);
 }
 

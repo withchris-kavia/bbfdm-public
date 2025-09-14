@@ -35,6 +35,7 @@
 
 // Global variables
 static void *deamon_lib_handle = NULL;
+static uint8_t s_log_level = 0xff;
 
 static void bbfdm_ctx_cleanup(struct bbfdm_context *u)
 {
@@ -963,7 +964,7 @@ static void register_bbfdm_apply_event(struct bbfdm_context *bbfdm_ctx)
 
 int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
 {
-	int err = 0, cur_log_mask=0;
+	int err = 0;
 
 	err = ubus_connect_ctx(&bbfdm_ctx->ubus_ctx, NULL);
 	if (err != UBUS_STATUS_OK) {
@@ -972,8 +973,7 @@ int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
 	}
 
 	// Set the logmask with default, if not already set by api
-	cur_log_mask = setlogmask(0);
-	if (cur_log_mask == 0xff) {
+	if (s_log_level == 0xff) {
 		BBF_INFO("Log level not set, setting default value %d", LOG_ERR);
 		bbfdm_ubus_set_log_level(LOG_ERR);
 	}
@@ -1031,6 +1031,12 @@ void bbfdm_ubus_set_service_name(struct bbfdm_context *bbfdm_ctx, const char *sr
 void bbfdm_ubus_set_log_level(int log_level)
 {
 	setlogmask(LOG_UPTO(log_level));
+	s_log_level = log_level;
+}
+
+uint8_t bbfdm_ubus_get_log_level(void)
+{
+	return s_log_level;
 }
 
 void bbfdm_ubus_load_data_model(DM_MAP_OBJ *DynamicObj)
