@@ -639,6 +639,7 @@ static void bbfdm_ctx_init(struct bbfdm_context *bbfdm_ctx)
 {
 	INIT_LIST_HEAD(&bbfdm_ctx->event_handlers);
 	INIT_LIST_HEAD(&bbfdm_ctx->config.apply_handlers);
+	INIT_LIST_HEAD(&bbfdm_ctx->changed_uci);
 }
 
 static void free_apply_handlers(bbfdm_config_t *config)
@@ -649,6 +650,22 @@ static void free_apply_handlers(bbfdm_config_t *config)
 		return;
 
 	list_for_each_entry_safe(node, tmp, &config->apply_handlers, list) {
+		list_del(&node->list);
+		BBFDM_FREE(node->file_path);
+		BBFDM_FREE(node);
+	}
+}
+
+static void free_changed_uci(struct bbfdm_context *bbfdm_ctx)
+{
+	struct apply_handler_node *node = NULL, *tmp = NULL;
+
+	if (bbfdm_ctx == NULL)
+		return;
+
+	memset(bbfdm_ctx->uci_change_proto, 0, sizeof(bbfdm_ctx->uci_change_proto));
+
+	list_for_each_entry_safe(node, tmp, &bbfdm_ctx->changed_uci, list) {
 		list_del(&node->list);
 		BBFDM_FREE(node->file_path);
 		BBFDM_FREE(node);
@@ -874,6 +891,7 @@ int bbfdm_print_data_model_schema(struct bbfdm_context *bbfdm_ctx, const enum bb
 	bbf_cleanup(&bbf_ctx);
 
 	free_apply_handlers(&bbfdm_ctx->config);
+	free_changed_uci(bbfdm_ctx);
 
 	bbfdm_ctx_cleanup(bbfdm_ctx);
 	return err;
@@ -886,15 +904,17 @@ static void perform_uci_sync_op(struct uloop_timeout *timeout)
 	if (dynamic_obj == NULL)
 		return;
 
-	for (int i = 0; dynamic_obj[i].path; i++) {
-		if (dynamic_obj[i].uci_sync_handler) {
-			dynamic_obj[i].uci_sync_handler();
-		}
-	}
-
 	struct bbfdm_context *bbfdm_ctx = container_of(timeout, struct bbfdm_context, sync_timer);
 	if (bbfdm_ctx == NULL)
 		return;
+
+	for (int i = 0; dynamic_obj[i].path; i++) {
+		if (dynamic_obj[i].uci_sync_handler) {
+			dynamic_obj[i].uci_sync_handler(bbfdm_ctx);
+		}
+	}
+
+	free_changed_uci(bbfdm_ctx);
 
 	if (bbfdm_refresh_references(BBFDM_BOTH, bbfdm_ctx->config.out_name)) {
 		BBF_ERR("Failed to refresh instance data base");
@@ -941,13 +961,41 @@ static void bbfdm_apply_event_cb(struct ubus_context *ctx __attribute__((unused)
 			if (DM_STRCMP(node->file_path, conf_name) != 0)
 				continue;
 
-			BBF_INFO("Scheduling UCI sync operation for changes performed by %s", proto);
-			memset(&bbfdm_ctx->sync_timer, 0, sizeof(struct uloop_timeout));
-			bbfdm_ctx->sync_timer.cb = perform_uci_sync_op;
-			uloop_timeout_set(&bbfdm_ctx->sync_timer, 10);
+			bool exist = false;
+			struct apply_handler_node *uci_node = NULL;
+			list_for_each_entry(uci_node, &bbfdm_ctx->changed_uci, list) {
+				if (DM_STRCMP(uci_node->file_path, conf_name) == 0) {
+					exist = true;
+					break;
+				}
+			}
 
-			return;
+			if (exist == true)
+				break;
+
+			uci_node = (struct apply_handler_node *)calloc(1, sizeof(struct apply_handler_node));
+			if (uci_node == NULL) {
+				BBFDM_ERR("Failed to allocate memory for changed uci list");
+				break;
+			}
+
+			INIT_LIST_HEAD(&uci_node->list);
+			list_add_tail(&uci_node->list, &bbfdm_ctx->changed_uci);
+			uci_node->file_path = strdup(conf_name);
+			break;
 		}
+	}
+
+	if (!list_empty(&bbfdm_ctx->changed_uci)) {
+		BBF_INFO("Scheduling UCI sync operation for changes performed by %s", proto);
+		if (DM_STRLEN(bbfdm_ctx->uci_change_proto) != 0) {
+			BBFDM_ERR("!!! Overwritting proto from %s to %s for UCI sync", bbfdm_ctx->uci_change_proto, proto);
+		}
+
+		snprintf(bbfdm_ctx->uci_change_proto, sizeof(bbfdm_ctx->uci_change_proto), "%s", proto);
+		memset(&bbfdm_ctx->sync_timer, 0, sizeof(struct uloop_timeout));
+		bbfdm_ctx->sync_timer.cb = perform_uci_sync_op;
+		uloop_timeout_set(&bbfdm_ctx->sync_timer, 0);
 	}
 }
 
@@ -1013,6 +1061,7 @@ int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
 int bbfdm_ubus_regiter_free(struct bbfdm_context *bbfdm_ctx)
 {
 	free_apply_handlers(&bbfdm_ctx->config);
+	free_changed_uci(bbfdm_ctx);
 	ubus_unregister_event_handler(&bbfdm_ctx->ubus_ctx, &bbfdm_ctx->apply_event);
 	free_ubus_event_handler(&bbfdm_ctx->ubus_ctx, &bbfdm_ctx->event_handlers);
 	bbfdm_ctx_cleanup(bbfdm_ctx);

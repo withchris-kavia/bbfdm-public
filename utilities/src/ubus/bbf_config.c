@@ -854,6 +854,9 @@ static void receive_notify_event(struct ubus_context *ctx, struct ubus_event_han
 		return;
 
 	char *config = blobmsg_get_string(tb[0]);
+	if (strlen(config) == 0)
+		return;
+
 	snprintf(file_path, sizeof(file_path), "/etc/config/%s", config);
 
 	if (g_internal_commit) {

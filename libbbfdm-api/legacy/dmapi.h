@@ -162,7 +162,7 @@ typedef struct dm_map_obj {
 	struct dm_leaf_s *root_leaf;
 	int (*init_module)(void *data);
 	int (*clean_module)(void *data);
-	int (*uci_sync_handler)(void);
+	int (*uci_sync_handler)(void *data);
 } DM_MAP_OBJ;
 
 struct dm_reference {
