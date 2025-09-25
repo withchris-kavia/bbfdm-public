@@ -679,6 +679,26 @@
         "cp -f genexis-packages/gnx-sfp/libopticaldm.so /usr/share/bbfdm/micro_services/gnx-sfp.so",
         "cp -f genexis-packages/gnx-sfp/bbfdm_service.json /etc/bbfdm/services/gnx-sfp.json"
       ]
+    },
+    {
+      "repo": "https://dev.iopsys.eu/feed/gnx.git",
+      "proto": "git",
+      "service_name": "opconf",
+      "unified_daemon": false,
+      "post_install": [
+        "sed 's/{BBF_VENDOR_PREFIX}/X_GENEXIS_EU_/g' genexis-packages/opconf/bbfdm_dm.json > /usr/share/bbfdm/micro_services/opconf.json",
+        "sed 's/{BBF_VENDOR_PREFIX}/X_GENEXIS_EU_/g' genexis-packages/opconf/bbfdm_service.json > /etc/bbfdm/services/opconf.json"
+      ]
+    },
+    {
+      "repo": "https://dev.iopsys.eu/feed/gnx.git",
+      "proto": "git",
+      "service_name": "gnx-l2snoopingfiltering",
+      "unified_daemon": false,
+      "post_install": [
+        "sed 's/{BBF_VENDOR_PREFIX}/X_GENEXIS_EU_/g' genexis-packages/gnx-l2snoopingfiltering/files/bbf_plugin/bbfdm_dm.json > /usr/share/bbfdm/micro_services/gnx-l2snoopingfiltering.json",
+        "sed 's/{BBF_VENDOR_PREFIX}/X_GENEXIS_EU_/g' genexis-packages/gnx-l2snoopingfiltering/files/bbf_plugin/bbfdm_service.json > /etc/bbfdm/services/gnx-l2snoopingfiltering.json"
+      ]
     }
   ],
   "output": {
