@@ -61,6 +61,7 @@ int dmubus_call_blob(const char *obj, const char *method, json_object *value, js
 int dmubus_call_blob_blocking(const char *obj, const char *method, json_object *value, json_object **resp);
 int dmubus_call_blob_set(const char *obj, const char *method, json_object *value);
 
+int dmubus_call_blob_msg(const char *obj, const char *method, struct blob_buf *blob_msg, json_object **resp);
 int dmubus_call_blob_msg_timeout(const char *obj, const char *method, struct blob_buf *blob_msg, int timeout);
 int dmubus_call_blob_msg_set(const char *obj, const char *method, struct blob_buf *blob_msg);
 
