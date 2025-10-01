@@ -335,7 +335,7 @@ static bool check_dependency(const char *conf_obj)
 
 	char *pch = NULL, *spch = NULL;
 	char conf_list[512] = {0};
-	
+
 	DM_STRNCPY(conf_list, conf_obj, sizeof(conf_list));
 
 	for (pch = strtok_r(conf_list, ";", &spch); pch != NULL; pch = strtok_r(NULL, ";", &spch)) {
@@ -620,6 +620,7 @@ char *handle_instance(struct dmctx *dmctx, DMNODE *parent_node, struct uci_secti
 
 	switch(parent_node->browse_type) {
 	case BROWSE_NORMAL:
+	case BROWSE_FIND_MAX_INST:
 		if (instance && *instance == '\0') {
 			int max_inst = find_max_instance(dmctx, parent_node);
 			snprintf(buf, sizeof(buf), "%d", max_inst);
@@ -627,7 +628,6 @@ char *handle_instance(struct dmctx *dmctx, DMNODE *parent_node, struct uci_secti
 			instance = dmstrdup(buf);
 		}
 		break;
-	case BROWSE_FIND_MAX_INST:
 	case BROWSE_NUM_OF_ENTRIES:
 		break;
 	}
@@ -943,7 +943,7 @@ static bool is_same_reference_path(const char *curr_value, const char *in_value)
 }
 
 /* **********
- * get value 
+ * get value
  * **********/
 static int get_value_obj(DMOBJECT_ARGS)
 {
@@ -1054,7 +1054,7 @@ int dm_entry_get_value(struct dmctx *dmctx)
 }
 
 /* **********
- * get name 
+ * get name
  * **********/
 static void fill_blob_alias_param(struct blob_buf *bb, const char *path, const char *data, const char *type, const char *alias)
 {
@@ -1395,7 +1395,7 @@ int dm_entry_get_instances(struct dmctx *ctx)
 }
 
 /* **************
- * add object 
+ * add object
  * **************/
 static int mobj_add_object(DMOBJECT_ARGS)
 {
@@ -1459,7 +1459,7 @@ int dm_entry_add_object(struct dmctx *dmctx)
 }
 
 /* **************
- * del object 
+ * del object
  * **************/
 static int delete_object_obj(DMOBJECT_ARGS)
 {
@@ -1511,7 +1511,7 @@ int dm_entry_delete_object(struct dmctx *dmctx)
 }
 
 /* **************
- * set value  
+ * set value
  * **************/
 static int mobj_set_value(DMOBJECT_ARGS)
 {
@@ -1781,7 +1781,7 @@ int dm_entry_object_exists(struct dmctx *dmctx)
 }
 
 /* **************
- * Operate  
+ * Operate
  * **************/
 static int mobj_operate(DMOBJECT_ARGS)
 {
