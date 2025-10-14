@@ -396,11 +396,35 @@ static char *bbfdm_resolve_external_reference_via_dmmap(struct dmctx *ctx, const
 
 		dmuci_get_value_by_section_string(dmmap_obj, linker_name, &curr_value);
 		if (DM_STRCMP(curr_value, linker_value) == 0) {
+			char reconstructed_path[1024] = {0};
 			char *linker_instance = NULL;
 			char *reference_path = NULL;
+			char *option_value = NULL;
+			int path_offset = 0;
 
 			dmuci_get_value_by_section_string(dmmap_obj, "__instance__", &linker_instance);
-			dmasprintf(&reference_path, "%s%s", linker_path, linker_instance);
+
+			/* Parse linker path to extract instance numbers from instance wildcard if exists
+			 * Example: linker path is Device.Bridging.Bridge.*.Port.
+			 * We need to replace * with the parent instance number
+			 */
+			for (size_t i = 0; i < count; i++) {
+
+				if (i > 0 && strcmp(parts[i], "*") == 0) {
+					dmuci_get_value_by_section_string(dmmap_obj, parts[i - 1], &option_value);
+					path_offset += snprintf(reconstructed_path + path_offset,
+							sizeof(reconstructed_path) - path_offset,
+							"%s.", option_value);
+					continue;
+				}
+
+				path_offset += snprintf(reconstructed_path + path_offset,
+						sizeof(reconstructed_path) - path_offset,
+						"%s.", parts[i]);
+			}
+
+			/* Append the final instance number */
+			dmasprintf(&reference_path, "%s%s", reconstructed_path, linker_instance);
 			return reference_path;
 		}
 	}
