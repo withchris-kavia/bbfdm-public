@@ -455,9 +455,11 @@ int bbfdm_get_references(struct dmctx *ctx, int match_action, const char *base_p
 
 	char *external_reference = NULL;
 
-	if (ctx->bbfdm_api_version == BBFDM_API_V1)
-		external_reference = bbfdm_resolve_external_reference_via_dmmap(ctx, base_path, key_name, key_value);
-	else
+	// Try dmmap first
+	external_reference = bbfdm_resolve_external_reference_via_dmmap(ctx, base_path, key_name, key_value);
+
+	// Fall back to JSON if dmmap failed
+	if (external_reference == NULL)
 		external_reference = bbfdm_resolve_external_reference_via_json(ctx, param_path, key_value);
 
 	if (external_reference != NULL) {
@@ -504,8 +506,47 @@ static json_object *get_node(json_object *root, const char *path)
 			break;
 		}
 	}
-
 	return curr;
+}
+
+static bool is_numeric(const char *str)
+{
+	if (!str || *str == '\0')
+		return false;
+
+	while (*str) {
+		if (*str < '0' || *str > '9')
+			return false;
+		str++;
+	}
+	return true;
+}
+
+static char *construct_section_name_from_path(char **parts, int count)
+{
+	char section_name[256] = {0};
+	int offset = 0;
+	int i;
+
+	// Start from index 2 (skip "Device" and top-level like "IP")
+	// Build section name: Type_Instance pairs
+	// Example: Device.IP.Interface.1.IPv4Address.2 -> Interface_1IPv4Address_2
+	for (i = 2; i < count; i++) {
+		if (is_numeric(parts[i])) {
+			// This is an instance number, append it with underscore
+			offset += snprintf(section_name + offset, sizeof(section_name) - offset, "_%s", parts[i]);
+		} else {
+			// This is an object type, only append if followed by an index number
+			if (i + 1 < count && is_numeric(parts[i + 1])) {
+				offset += snprintf(section_name + offset, sizeof(section_name) - offset, "%s", parts[i]);
+			}
+		}
+	}
+
+	if (offset > 0)
+		return dmstrdup(section_name);
+
+	return NULL;
 }
 
 int bbfdm_get_reference_linker(struct dmctx *ctx, char *reference_path, struct dm_reference *reference_args)
@@ -525,6 +566,30 @@ int bbfdm_get_reference_linker(struct dmctx *ctx, char *reference_path, struct d
 	if (count < 2)
 		return -1;
 
+	// Try to resolve from dmmap first (UCI)
+	if (ctx) {
+		char *section_name = construct_section_name_from_path(parts, count);
+
+		if (section_name) {
+			// Package name is the second level in the path (e.g., "IP" in Device.IP.Interface.1)
+			const char *package_name = parts[1];
+			char *name_value = NULL;
+
+			// Get the Name option value directly using package name and section name
+			int ret = dmuci_get_option_value_string(package_name, section_name, "Name", &name_value);
+
+			if (ret == 0 && name_value && DM_STRLEN(name_value) > 0) {
+				reference_args->value = dmstrdup(name_value);
+				reference_args->is_valid_path = true;
+				dmfree(section_name);
+				return 0;
+			}
+
+			dmfree(section_name);
+		}
+	}
+
+	// Fallback to JSON resolution
 	snprintf(file_path, sizeof(file_path), "%s/%s.json", DATA_MODEL_DB_PATH, parts[1]);
 	if (strlen(file_path) == 0)
 		return -1;
