@@ -379,6 +379,19 @@ char *bbfdm_resolve_external_reference_via_json(struct dmctx *ctx, const char *l
 	return reference_path;
 }
 
+static bool is_numeric(const char *str)
+{
+	if (!str || *str == '\0')
+		return false;
+
+	while (*str) {
+		if (*str < '0' || *str > '9')
+			return false;
+		str++;
+	}
+	return true;
+}
+
 static char *bbfdm_resolve_external_reference_via_dmmap(struct dmctx *ctx, const char *linker_path, const char *linker_name, const char *linker_value)
 {
 	struct uci_section *dmmap_obj = NULL;
@@ -400,7 +413,71 @@ static char *bbfdm_resolve_external_reference_via_dmmap(struct dmctx *ctx, const
 			char *reference_path = NULL;
 
 			dmuci_get_value_by_section_string(dmmap_obj, "__instance__", &linker_instance);
-			dmasprintf(&reference_path, "%s%s", linker_path, linker_instance);
+
+			/* Get the section name to extract parent instance numbers */
+			const char *section_name = dmmap_obj->e.name;
+
+			/* Parse section name to extract instance numbers
+			 * Example: "Bridge_1Port_2" for Device.Bridging.Bridge.*.Port.
+			 * We need to replace * with the parent instance number
+			 */
+			char reconstructed_path[512] = {0};
+			int path_offset = 0;
+			int section_idx = 0;
+			size_t section_len = strlen(section_name);
+
+			/* Build the path by matching object names and extracting instances from section name */
+			for (size_t i = 0; i < count; i++) {
+				/* Skip empty parts */
+				if (strlen(parts[i]) == 0)
+					continue;
+
+				if (i > 0 && path_offset > 0)
+					path_offset += snprintf(reconstructed_path + path_offset,
+					                        sizeof(reconstructed_path) - path_offset, ".");
+
+				if (strcmp(parts[i], "*") == 0) {
+					/* This is a wildcard, extract instance from section name */
+					/* Find the previous object name in the section name */
+					if (i > 2) {  /* Must have at least Device.Package.Object before * */
+						const char *obj_name = parts[i - 1];
+						size_t obj_len = strlen(obj_name);
+
+						/* Search for object name in section name */
+						const char *obj_pos = strstr(section_name + section_idx, obj_name);
+						if (obj_pos) {
+							section_idx = obj_pos - section_name + obj_len;
+
+							/* Extract instance number after object name (after underscore) */
+							if (section_idx < section_len && section_name[section_idx] == '_') {
+								section_idx++; /* Skip underscore */
+								char instance_num[16] = {0};
+								int inst_idx = 0;
+								while (section_idx < section_len &&
+								       section_name[section_idx] >= '0' &&
+								       section_name[section_idx] <= '9') {
+									instance_num[inst_idx++] = section_name[section_idx++];
+								}
+								instance_num[inst_idx] = '\0';
+								path_offset += snprintf(reconstructed_path + path_offset,
+								                        sizeof(reconstructed_path) - path_offset,
+								                        "%s", instance_num);
+							}
+						}
+					}
+				} else if (is_numeric(parts[i])) {
+					/* This is already a numeric instance, skip it as it will be replaced */
+					continue;
+				} else {
+					/* Regular path component */
+					path_offset += snprintf(reconstructed_path + path_offset,
+					                        sizeof(reconstructed_path) - path_offset,
+					                        "%s", parts[i]);
+				}
+			}
+
+			/* Append the final instance number */
+			dmasprintf(&reference_path, "%s.%s", reconstructed_path, linker_instance);
 			return reference_path;
 		}
 	}
@@ -507,19 +584,6 @@ static json_object *get_node(json_object *root, const char *path)
 		}
 	}
 	return curr;
-}
-
-static bool is_numeric(const char *str)
-{
-	if (!str || *str == '\0')
-		return false;
-
-	while (*str) {
-		if (*str < '0' || *str > '9')
-			return false;
-		str++;
-	}
-	return true;
 }
 
 static char *construct_section_name_from_path(char **parts, int count)
