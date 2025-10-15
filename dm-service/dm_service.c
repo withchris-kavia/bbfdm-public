@@ -71,8 +71,7 @@ int main(int argc, char **argv)
 	bbfdm_ubus_set_log_level(log_level);
 	bbfdm_ubus_load_data_model(NULL);
 
-
-	err = bbfdm_ubus_regiter_init(&bbfdm_ctx);
+	err = bbfdm_ubus_register_init(&bbfdm_ctx);
 	if (err != 0)
 		goto exit;
 
@@ -87,7 +86,7 @@ int main(int argc, char **argv)
 
 exit:
 	if (err != -5) // Error code is not -5, indicating that ubus_ctx is connected, proceed with shutdown
-		bbfdm_ubus_regiter_free(&bbfdm_ctx);
+		bbfdm_ubus_register_free(&bbfdm_ctx);
 
 	closelog();
 

@@ -47,7 +47,13 @@ typedef struct bbfdm_data {
 	struct blob_buf bb;
 } bbfdm_data_t;
 
+int bbfdm_ubus_register_init(struct bbfdm_context *bbfdm_ctx);
+int bbfdm_ubus_register_free(struct bbfdm_context *bbfdm_ctx);
+
+__attribute__((deprecated("Use bbfdm_ubus_register_init() instead of bbfdm_ubus_regiter_init()")))
 int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx);
+
+__attribute__((deprecated("Use bbfdm_ubus_register_free() instead of bbfdm_ubus_regiter_free()")))
 int bbfdm_ubus_regiter_free(struct bbfdm_context *bbfdm_ctx);
 
 int bbfdm_print_data_model_schema(struct bbfdm_context *bbfdm_ctx, const enum bbfdm_type_enum type);

@@ -1010,7 +1010,7 @@ static void register_bbfdm_apply_event(struct bbfdm_context *bbfdm_ctx)
 	ubus_register_event_handler(&bbfdm_ctx->ubus_ctx, &bbfdm_ctx->apply_event, "bbfdm.apply");
 }
 
-int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
+int bbfdm_ubus_register_init(struct bbfdm_context *bbfdm_ctx)
 {
 	int err = 0;
 
@@ -1058,7 +1058,7 @@ int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
 	return register_events_to_ubus(&bbfdm_ctx->ubus_ctx, &bbfdm_ctx->event_handlers);
 }
 
-int bbfdm_ubus_regiter_free(struct bbfdm_context *bbfdm_ctx)
+int bbfdm_ubus_register_free(struct bbfdm_context *bbfdm_ctx)
 {
 	free_apply_handlers(&bbfdm_ctx->config);
 	free_changed_uci(bbfdm_ctx);
@@ -1069,6 +1069,16 @@ int bbfdm_ubus_regiter_free(struct bbfdm_context *bbfdm_ctx)
 	ubus_shutdown(&bbfdm_ctx->ubus_ctx);
 
 	return 0;
+}
+
+int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
+{
+	return bbfdm_ubus_register_init(bbfdm_ctx);
+}
+
+int bbfdm_ubus_regiter_free(struct bbfdm_context *bbfdm_ctx)
+{
+	return bbfdm_ubus_register_free(bbfdm_ctx);
 }
 
 void bbfdm_ubus_set_service_name(struct bbfdm_context *bbfdm_ctx, const char *srv_name)
