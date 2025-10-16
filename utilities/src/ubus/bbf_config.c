@@ -19,20 +19,16 @@
 
 #include "utils.h"
 
-/* ------------------------------------------------------------------ */
-/* DM-framework service transaction helpers                          */
-/* ------------------------------------------------------------------ */
-
-/* Timeout (ms) used for each service transaction call */
-#define DEFAULT_UBUS_TIMEOUT 5000
-#define SERVICE_TRANSACTION_TIMEOUT DEFAULT_UBUS_TIMEOUT
-
 struct trans_ctx {
     struct ubus_context *ctx;
     const char *cmd;   /* "commit" or "abort" */
     const char *proto; /* proto from commit/revert input */
 };
 
+
+/* ------------------------------------------------------------------ */
+/* DM-framework service transaction helpers                          */
+/* ------------------------------------------------------------------ */
 static void invoke_service_transaction(struct ubus_context *ctx, const char *service_name,
                                        const char *cmd, const char *proto)
 {
@@ -126,6 +122,7 @@ static void trigger_dfm_service_transactions(struct ubus_context *ctx, const cha
 
     blob_buf_free(&bb);
 }
+
 #define TIME_TO_WAIT_FOR_RELOAD 5
 #define MAX_PACKAGE_NUM 256
 #define MAX_SERVICE_NUM 16
@@ -948,36 +945,6 @@ static void free_changed_uci_list(struct list_head *uci_list)
 	}
 }
 
-static int bbf_config_changes_handler(struct ubus_context *ctx, struct ubus_object *obj __attribute__((unused)),
-		    struct ubus_request_data *req, const char *method __attribute__((unused)),
-		    struct blob_attr *msg)
-{
-	struct blob_attr *tb[__MAX];
-	struct blob_buf bb = {0};
-
-	ULOG_INFO("Changes handler called");
-
-	memset(&bb, 0, sizeof(struct blob_buf));
-	blob_buf_init(&bb, 0);
-
-	if (blobmsg_parse(bbf_config_policy, __MAX, tb, blob_data(msg), blob_len(msg))) {
-		blobmsg_add_string(&bb, "error", "Failed to parse blob");
-		goto end;
-	}
-
-	// Return empty array for now - uci_config_changes and update_critical_services not available in this codebase
-	void *array = blobmsg_open_array(&bb, "configs");
-	blobmsg_close_array(&bb, array);
-
-end:
-	ubus_send_reply(ctx, req, bb.head);
-	blob_buf_free(&bb);
-
-	ULOG_INFO("Changes handler exit");
-
-	return 0;
-}
-
 static void receive_notify_event(struct ubus_context *ctx, struct ubus_event_handler *ev,
 			  const char *type, struct blob_attr *msg)
 {
@@ -1020,7 +987,6 @@ static void receive_notify_event(struct ubus_context *ctx, struct ubus_event_han
 static const struct ubus_method bbf_config_methods[] = {
 	UBUS_METHOD("commit", bbf_config_commit_handler, bbf_config_policy),
 	UBUS_METHOD("revert", bbf_config_revert_handler, bbf_config_policy),
-	UBUS_METHOD("changes", bbf_config_changes_handler, bbf_config_policy),
 };
 
 static struct ubus_object_type bbf_config_object_type = UBUS_OBJECT_TYPE("bbf.config", bbf_config_methods);
