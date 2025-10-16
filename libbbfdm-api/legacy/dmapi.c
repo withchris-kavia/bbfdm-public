@@ -639,8 +639,8 @@ int bbfdm_get_reference_linker(struct dmctx *ctx, char *reference_path, struct d
 			const char *package_name = parts[1];
 			char *name_value = NULL;
 
-			// Get the Name option value directly using package name and section name
-			int ret = dmuci_get_option_value_string(package_name, section_name, "Name", &name_value);
+			// Get the Name option value directly using package name and section name from dmmap
+			int ret = dmuci_get_option_value_string_bbfdm(package_name, section_name, "Name", &name_value);
 
 			if (ret == 0 && name_value && DM_STRLEN(name_value) > 0) {
 				reference_args->value = dmstrdup(name_value);
