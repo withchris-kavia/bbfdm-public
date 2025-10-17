@@ -85,9 +85,7 @@ int main(int argc, char **argv)
 	uloop_run();
 
 exit:
-	if (err != -5) // Error code is not -5, indicating that ubus_ctx is connected, proceed with shutdown
-		bbfdm_ubus_register_free(&bbfdm_ctx);
-
+	bbfdm_ubus_register_free(&bbfdm_ctx);
 	closelog();
 
 	return err;

@@ -37,6 +37,13 @@
 static void *deamon_lib_handle = NULL;
 static uint8_t s_log_level = 0xff;
 
+static void bbfdm_ctx_init(struct bbfdm_context *bbfdm_ctx)
+{
+	INIT_LIST_HEAD(&bbfdm_ctx->event_handlers);
+	INIT_LIST_HEAD(&bbfdm_ctx->config.apply_handlers);
+	INIT_LIST_HEAD(&bbfdm_ctx->changed_uci);
+}
+
 static void bbfdm_ctx_cleanup(struct bbfdm_context *u)
 {
 	bbf_global_clean(DEAMON_DM_ROOT_OBJ);
@@ -134,7 +141,7 @@ static int bbfdm_start_deferred(bbfdm_data_t *data, void (*EXEC_CB)(bbfdm_data_t
 		BBF_ERR("fork error");
 		goto err_out;
 	} else if (child == 0) {
-		u = container_of(data->ctx, struct bbfdm_context, ubus_ctx);
+		u = container_of(data->obj, struct bbfdm_context, ubus_obj);
 		if (u == NULL) {
 			BBF_ERR("{fork} Failed to get the bbfdm context");
 			exit(EXIT_FAILURE);
@@ -142,7 +149,7 @@ static int bbfdm_start_deferred(bbfdm_data_t *data, void (*EXEC_CB)(bbfdm_data_t
 
 		/* free fd's and memory inherited from parent */
 		uloop_done();
-		ubus_shutdown(data->ctx);
+		ubus_free(data->ctx);
 		async_req_free(r);
 		fclose(stdin);
 		fclose(stdout);
@@ -221,7 +228,7 @@ static const struct blobmsg_policy dm_schema_policy[] = {
 	[DM_SCHEMA_OPTIONAL] = { .name = "optional", .type = BLOBMSG_TYPE_TABLE},
 };
 
-static int bbfdm_schema_handler(struct ubus_context *ctx, struct ubus_object *obj __attribute__((unused)),
+static int bbfdm_schema_handler(struct ubus_context *ctx, struct ubus_object *obj,
 		    struct ubus_request_data *req, const char *method __attribute__((unused)),
 		    struct blob_attr *msg)
 {
@@ -232,7 +239,7 @@ static int bbfdm_schema_handler(struct ubus_context *ctx, struct ubus_object *ob
 
 	memset(&data, 0, sizeof(bbfdm_data_t));
 
-	u = container_of(ctx, struct bbfdm_context, ubus_ctx);
+	u = container_of(obj, struct bbfdm_context, ubus_obj);
 	if (u == NULL) {
 		BBF_ERR("Failed to get the bbfdm context");
 		return UBUS_STATUS_UNKNOWN_ERROR;
@@ -401,7 +408,7 @@ static const struct blobmsg_policy dm_operate_policy[__DM_OPERATE_MAX] = {
 	[DM_OPERATE_OPTIONAL] = { .name = "optional", .type = BLOBMSG_TYPE_TABLE },
 };
 
-static int bbfdm_operate_handler(struct ubus_context *ctx, struct ubus_object *obj __attribute__((unused)),
+static int bbfdm_operate_handler(struct ubus_context *ctx, struct ubus_object *obj,
 		struct ubus_request_data *req, const char *method __attribute__((unused)),
 		struct blob_attr *msg)
 {
@@ -424,6 +431,7 @@ static int bbfdm_operate_handler(struct ubus_context *ctx, struct ubus_object *o
 
 	data.ctx = ctx;
 	data.req = req;
+	data.obj = obj;
 	data.bbf_ctx.in_param = path;
 	data.bbf_ctx.linker = tb[DM_OPERATE_COMMAND_KEY] ? blobmsg_get_string(tb[DM_OPERATE_COMMAND_KEY]) : "";
 
@@ -612,34 +620,15 @@ static struct ubus_method bbf_methods[] = {
 
 static struct ubus_object_type bbf_type = UBUS_OBJECT_TYPE("", bbf_methods);
 
-static struct ubus_object bbf_object = {
-	.name = "",
-	.type = &bbf_type,
-	.methods = bbf_methods,
-	.n_methods = ARRAY_SIZE(bbf_methods)
-};
-
-static int regiter_ubus_object(struct ubus_context *ctx)
+static int regiter_ubus_object(struct bbfdm_context *bbfdm_ctx)
 {
-	struct bbfdm_context *u;
+	bbfdm_ctx->ubus_obj.name = bbfdm_ctx->config.out_name;
+	bbfdm_ctx->ubus_obj.type = &bbf_type;
+	bbfdm_ctx->ubus_obj.type->name = bbfdm_ctx->config.out_name;
+	bbfdm_ctx->ubus_obj.methods = bbf_methods;
+	bbfdm_ctx->ubus_obj.n_methods = ARRAY_SIZE(bbf_methods);
 
-	u = container_of(ctx, struct bbfdm_context, ubus_ctx);
-	if (u == NULL) {
-		BBF_ERR("failed to get the bbfdm context");
-		return -1;
-	}
-
-	bbf_object.name = u->config.out_name;
-	bbf_object.type->name = u->config.out_name;
-
-	return ubus_add_object(ctx, &bbf_object);
-}
-
-static void bbfdm_ctx_init(struct bbfdm_context *bbfdm_ctx)
-{
-	INIT_LIST_HEAD(&bbfdm_ctx->event_handlers);
-	INIT_LIST_HEAD(&bbfdm_ctx->config.apply_handlers);
-	INIT_LIST_HEAD(&bbfdm_ctx->changed_uci);
+	return ubus_add_object(bbfdm_ctx->ubus_ctx, &bbfdm_ctx->ubus_obj);
 }
 
 static void free_apply_handlers(bbfdm_config_t *config)
@@ -999,26 +988,35 @@ static void bbfdm_apply_event_cb(struct ubus_context *ctx __attribute__((unused)
 	}
 }
 
-static void register_bbfdm_apply_event(struct bbfdm_context *bbfdm_ctx)
+static int register_bbfdm_apply_event(struct bbfdm_context *bbfdm_ctx)
 {
 	if (bbfdm_ctx == NULL)
-		return;
+		return -1;
 
 	memset(&bbfdm_ctx->apply_event, 0, sizeof(struct ubus_event_handler));
 	bbfdm_ctx->apply_event.cb = bbfdm_apply_event_cb;
 
-	ubus_register_event_handler(&bbfdm_ctx->ubus_ctx, &bbfdm_ctx->apply_event, "bbfdm.apply");
+	ubus_register_event_handler(bbfdm_ctx->ubus_ctx, &bbfdm_ctx->apply_event, "bbfdm.apply");
+	return 0;
+}
+
+static int bbfdm_ubus_init(struct bbfdm_context *bbfdm_ctx)
+{
+	bbfdm_ctx->ubus_ctx = ubus_connect(NULL);
+	if (!bbfdm_ctx->ubus_ctx) {
+		BBF_ERR("Failed to connect to ubus");
+		return -1;
+	}
+
+	uloop_init();
+	ubus_add_uloop(bbfdm_ctx->ubus_ctx);
+	bbfdm_ctx->internal_ubus_ctx = true;
+	return 0;
 }
 
 int bbfdm_ubus_register_init(struct bbfdm_context *bbfdm_ctx)
 {
 	int err = 0;
-
-	err = ubus_connect_ctx(&bbfdm_ctx->ubus_ctx, NULL);
-	if (err != UBUS_STATUS_OK) {
-		BBF_ERR("Failed to connect to ubus");
-		return -5;  // Error code -5 indicating that ubus_ctx is not connected
-	}
 
 	// Set the logmask with default, if not already set by api
 	if (s_log_level == 0xff) {
@@ -1026,8 +1024,13 @@ int bbfdm_ubus_register_init(struct bbfdm_context *bbfdm_ctx)
 		bbfdm_ubus_set_log_level(LOG_ERR);
 	}
 
-	uloop_init();
-	ubus_add_uloop(&bbfdm_ctx->ubus_ctx);
+	if (bbfdm_ctx->ubus_ctx == NULL) {
+		err = bbfdm_ubus_init(bbfdm_ctx);
+		if (err) {
+			BBF_ERR("Failed to initialize ubus_ctx internally");
+			return err;
+		}
+	}
 
 	bbfdm_ctx_init(bbfdm_ctx);
 
@@ -1043,7 +1046,7 @@ int bbfdm_ubus_register_init(struct bbfdm_context *bbfdm_ctx)
 		return err;
 	}
 
-	err = regiter_ubus_object(&bbfdm_ctx->ubus_ctx);
+	err = regiter_ubus_object(bbfdm_ctx);
 	if (err != UBUS_STATUS_OK)
 		return -1;
 
@@ -1053,20 +1056,30 @@ int bbfdm_ubus_register_init(struct bbfdm_context *bbfdm_ctx)
 		return -1;
 	}
 
-	register_bbfdm_apply_event(bbfdm_ctx);
+	err = register_bbfdm_apply_event(bbfdm_ctx);
+	if (err) {
+		BBF_ERR("Failed to register bbfdm apply event");
+		return -1;
+	}
 
-	return register_events_to_ubus(&bbfdm_ctx->ubus_ctx, &bbfdm_ctx->event_handlers);
+	return register_events_to_ubus(bbfdm_ctx->ubus_ctx, &bbfdm_ctx->event_handlers);
 }
 
 int bbfdm_ubus_register_free(struct bbfdm_context *bbfdm_ctx)
 {
 	free_apply_handlers(&bbfdm_ctx->config);
 	free_changed_uci(bbfdm_ctx);
-	ubus_unregister_event_handler(&bbfdm_ctx->ubus_ctx, &bbfdm_ctx->apply_event);
-	free_ubus_event_handler(&bbfdm_ctx->ubus_ctx, &bbfdm_ctx->event_handlers);
+
+	if (bbfdm_ctx->ubus_ctx) {
+		ubus_unregister_event_handler(bbfdm_ctx->ubus_ctx, &bbfdm_ctx->apply_event);
+		free_ubus_event_handler(bbfdm_ctx->ubus_ctx, &bbfdm_ctx->event_handlers);
+	}
+
+	if (bbfdm_ctx->ubus_ctx && bbfdm_ctx->internal_ubus_ctx) {
+		ubus_free(bbfdm_ctx->ubus_ctx);
+		uloop_done();
+	}
 	bbfdm_ctx_cleanup(bbfdm_ctx);
-	uloop_done();
-	ubus_shutdown(&bbfdm_ctx->ubus_ctx);
 
 	return 0;
 }

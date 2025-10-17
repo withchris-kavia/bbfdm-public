@@ -26,7 +26,7 @@ struct dm_path_node {
 
 struct ev_handler_node {
 	char *ev_name;
-	struct ubus_event_handler *ev_handler;
+	struct ubus_event_handler ev_handler;
 	struct list_head dm_paths_list; // For dm path list
 	struct list_head list; // For event list
 };
@@ -68,26 +68,22 @@ void event_callback(const void *arg1, void *arg2)
 	free(e_args);
 }
 
-static void bbfdm_event_handler(struct ubus_context *ctx, struct ubus_event_handler *ev,
-				const char *type, struct blob_attr *msg)
+static void bbfdm_event_handler_cb(struct ubus_context *ctx __attribute__((unused)), struct ubus_event_handler *ev,
+				const char *type __attribute__((unused)), struct blob_attr *msg)
 {
-	(void)ev;
 	struct ev_handler_node *ev_node = NULL;
 	struct dm_path_node *dp_iter = NULL;
-	struct bbfdm_context *u = NULL;
 
-	u = container_of(ctx, struct bbfdm_context, ubus_ctx);
-	if (u == NULL) {
-		BBF_ERR("Failed to get the bbfdm context");
+	ev_node = container_of(ev, struct ev_handler_node, ev_handler);
+	if (!ev_node) {
+		BBF_ERR("Failed to get event node");
 		return;
 	}
 
-	if (!msg || !type)
+	if (!msg) {
+		BBF_ERR("Failed to get message from event");
 		return;
-
-	ev_node = get_event_node(&u->event_handlers, type);
-	if (!ev_node)
-		return;
+	}
 
 	list_for_each_entry(dp_iter, &ev_node->dm_paths_list, list) {
 		char dm_path[MAX_DM_PATH];
@@ -185,13 +181,8 @@ static void add_ubus_event_handler(struct ubus_context *ctx, const char *ev_name
 		list_add_tail(&node->list, ev_list);
 
 		node->ev_name = strdup(ev_name);
-		node->ev_handler = (struct ubus_event_handler *)calloc(1, sizeof(struct ubus_event_handler));
-		if (node->ev_handler) {
-			node->ev_handler->cb = bbfdm_event_handler;
-			if (ubus_register_event_handler(ctx, node->ev_handler, ev_name) != 0) {
-				BBF_ERR("Failed to register: %s", ev_name);
-			}
-		}
+		node->ev_handler.cb = bbfdm_event_handler_cb;
+		ubus_register_event_handler(ctx, &node->ev_handler, ev_name);
 	}
 
 	add_dm_path(node, dm_path);
@@ -250,10 +241,7 @@ void free_ubus_event_handler(struct ubus_context *ctx, struct list_head *ev_list
 		return;
 
 	list_for_each_entry_safe(iter, tmp, ev_list, list) {
-		if (iter->ev_handler != NULL) {
-			ubus_unregister_event_handler(ctx, iter->ev_handler);
-			free(iter->ev_handler);
-		}
+		ubus_unregister_event_handler(ctx, &iter->ev_handler);
 
 		if (iter->ev_name)
 			free(iter->ev_name);
