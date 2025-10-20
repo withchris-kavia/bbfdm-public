@@ -886,15 +886,11 @@ int bbfdm_print_data_model_schema(struct bbfdm_context *bbfdm_ctx, const enum bb
 	return err;
 }
 
-static void perform_uci_sync_op(struct uloop_timeout *timeout)
+static void perform_uci_sync_op(struct bbfdm_context *bbfdm_ctx)
 {
 	DM_MAP_OBJ *dynamic_obj = INTERNAL_ROOT_TREE;
 
-	if (dynamic_obj == NULL)
-		return;
-
-	struct bbfdm_context *bbfdm_ctx = container_of(timeout, struct bbfdm_context, sync_timer);
-	if (bbfdm_ctx == NULL)
+	if (dynamic_obj == NULL || bbfdm_ctx == NULL)
 		return;
 
 	for (int i = 0; dynamic_obj[i].path; i++) {
@@ -907,7 +903,6 @@ static void perform_uci_sync_op(struct uloop_timeout *timeout)
 
 	if (bbfdm_refresh_references(BBFDM_BOTH, bbfdm_ctx->config.out_name)) {
 		BBF_ERR("Failed to refresh instance data base");
-		return;
 	}
 }
 
@@ -982,9 +977,7 @@ static void bbfdm_apply_event_cb(struct ubus_context *ctx __attribute__((unused)
 		}
 
 		snprintf(bbfdm_ctx->uci_change_proto, sizeof(bbfdm_ctx->uci_change_proto), "%s", proto);
-		memset(&bbfdm_ctx->sync_timer, 0, sizeof(struct uloop_timeout));
-		bbfdm_ctx->sync_timer.cb = perform_uci_sync_op;
-		uloop_timeout_set(&bbfdm_ctx->sync_timer, 0);
+		perform_uci_sync_op(bbfdm_ctx);
 	}
 }
 

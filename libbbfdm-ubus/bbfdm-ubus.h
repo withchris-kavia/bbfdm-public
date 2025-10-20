@@ -35,7 +35,6 @@ struct bbfdm_context {
 	struct ubus_context *ubus_ctx;
 	struct ubus_object ubus_obj;
 	struct list_head event_handlers;
-	struct uloop_timeout sync_timer;
 	struct list_head changed_uci;
 	bool internal_ubus_ctx;
 	char uci_change_proto[10];
