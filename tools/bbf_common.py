@@ -113,19 +113,22 @@ def build_command(plugin, proto):
     service_name = get_option_value(plugin, "service_name")
     unified = get_option_value(plugin, "unified_daemon", False)
     daemon_name = get_option_value(plugin, "daemon_name", "")
+    schema_option = get_option_value(plugin, "schema_option", "d") # default stays 'd'
 
     if not service_name:
         return None  # skip this plugin
 
+    # Start with base command
     if unified:
         base_cmd = f"{daemon_name}"
     else:
         base_cmd = f"dm-service -m {service_name}"
 
+    # Append protocol-specific schema options
     if proto == "cwmp":
-        base_cmd += " -d"
+        base_cmd += f" -{schema_option}"
     elif proto == "usp":
-        base_cmd += " -dd"
+        base_cmd += f" -{schema_option}{schema_option}"
 
     return base_cmd
 

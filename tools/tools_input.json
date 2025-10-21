@@ -114,6 +114,24 @@
       ]
     },
     {
+      "repo": "https://dev.iopsys.eu/multi-ap/decollector.git",
+      "proto": "git",
+      "service_name": "decollector",
+      "unified_daemon": true,
+      "daemon_name": "/usr/sbin/decollector",
+      "schema_option": "c",
+      "compile": [
+        "./gitlab-ci/install-dependencies.sh",
+        "rm -f /etc/supervisor/conf.d/iopsys-supervisord.conf",
+        "make -C src clean",
+        "make -C src DECOLLECTOR_BUILD_TR181_PLUGIN='y' CFLAGS+='-DEASYMESH_VERSION=6 -DDECOLLECTOR_BUILD_TR181_PLUGIN -DDECOLLECTOR_VENDOR_EXTENSIONS -DSERVICE_NAME=\\\"decollector\\\" -DCUSTOM_PREFIX=\\\"X_IOPSYS_EU_\\\"'"
+      ],
+      "post_install": [
+        "cp -f src/decollector /usr/sbin/",
+        "cp -f /opt/dev/iopsys/decollector/bbfdm_service.json /etc/bbfdm/services/decollector.json"
+      ]
+    },
+    {
       "repo": "https://dev.iopsys.eu/hal/ethmngr.git",
       "proto": "git",
       "service_name": "ethmngr",
