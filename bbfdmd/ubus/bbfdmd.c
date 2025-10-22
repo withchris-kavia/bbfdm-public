@@ -248,7 +248,7 @@ static void bbfdm_handle_schema_request(struct ubus_context *ctx, struct ubus_re
 
 static const struct blobmsg_policy bbfdm_policy[] = {
 	[BBFDM_PATH] = { .name = "path", .type = BLOBMSG_TYPE_STRING },
-	[BBFDM_VALUE] = { .name = "value", .type = BLOBMSG_TYPE_STRING },
+	[BBFDM_OBJ_PATH] = { .name = "obj_path", .type = BLOBMSG_TYPE_TABLE },
 	[BBFDM_INPUT] = { .name = "optional", .type = BLOBMSG_TYPE_TABLE}
 };
 
@@ -329,6 +329,7 @@ static int bbfdm_handler_sync(struct ubus_context *ctx, struct ubus_object *obj,
 	unsigned int requested_proto = BBFDMD_BOTH;
 	bool raw_format = false;
 	struct blob_buf bb = {0};
+	int pos = 0;
 
 	if (blobmsg_parse(bbfdm_policy, __BBFDM_MAX, tb, blob_data(msg), blob_len(msg))) {
 		BBFDM_WARNING("Failed to parse input message");
@@ -342,12 +343,25 @@ static int bbfdm_handler_sync(struct ubus_context *ctx, struct ubus_object *obj,
 
 	BBFDM_INFO("ubus method|%s|, name|%s|", method, obj->name);
 
-	snprintf(requested_path, sizeof(requested_path), "%s", blobmsg_get_string(tb[BBFDM_PATH]));
+	pos = snprintf(requested_path, sizeof(requested_path), "%s", blobmsg_get_string(tb[BBFDM_PATH]));
 
 	memset(&bb, 0, sizeof(struct blob_buf));
 	blob_buf_init(&bb, 0);
 
 	fill_optional_input(tb[BBFDM_INPUT], &requested_proto, &raw_format);
+
+	if (tb[BBFDM_OBJ_PATH]) {
+		/* If 'obj_path' is provided, extend the requested_path
+		 * by appending the name of the first entry in 'obj_path' table
+		 */
+		struct blob_attr *attr;
+
+		attr = (struct blob_attr *)blobmsg_data(tb[BBFDM_OBJ_PATH]);
+		if (attr) {
+			const char *extra_path = blobmsg_name(attr);
+			snprintf(requested_path + pos, sizeof(requested_path) - pos, "%s", extra_path ? extra_path : "");
+		}
+	}
 
 	list_for_each_entry(service, &registered_services, list) {
 
