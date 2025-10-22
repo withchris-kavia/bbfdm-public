@@ -448,8 +448,16 @@ static void dm_browse_entry(struct dmctx *dmctx, DMNODE *parent_node, DMOBJ *ent
 	else
 		dmasprintf(&(node.current_object), "%s%s.", parent_obj, entryobj->obj);
 
-	if (DM_STRCMP(parent_obj, ROOT_NODE) == 0) {
+	if (DM_STRCMP(parent_obj, ROOT_NODE) == 0) { // Case1: parent object is 'Device.'
 		node.current_object_file = entryobj->obj;
+	} else if (parent_node->parent && DM_STRLEN(parent_node->parent->current_object) == 0) { // Case2: parent object is 'Device.X.X.'
+		size_t count = 0;
+
+		char **parts = strsplit(parent_obj, ".", &count);
+		if (count < 2)
+			return;
+
+		node.current_object_file = parts[1];
 	}
 
 	if (dmctx->checkobj) {
