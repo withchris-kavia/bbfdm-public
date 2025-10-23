@@ -32,22 +32,30 @@ typedef struct bbfdm_config {
 struct bbfdm_context {
 	bbfdm_config_t config;
 	struct ubus_event_handler apply_event;
-	struct ubus_context ubus_ctx;
+	struct ubus_context *ubus_ctx;
+	struct ubus_object ubus_obj;
 	struct list_head event_handlers;
-	struct uloop_timeout sync_timer;
 	struct list_head changed_uci;
+	bool internal_ubus_ctx;
 	char uci_change_proto[10];
 };
 
 typedef struct bbfdm_data {
 	struct ubus_context *ctx;
+	struct ubus_object *obj;
 	struct ubus_request_data *req;
 	struct list_head *plist;
 	struct dmctx bbf_ctx;
 	struct blob_buf bb;
 } bbfdm_data_t;
 
+int bbfdm_ubus_register_init(struct bbfdm_context *bbfdm_ctx);
+int bbfdm_ubus_register_free(struct bbfdm_context *bbfdm_ctx);
+
+__attribute__((deprecated("Use bbfdm_ubus_register_init() instead of bbfdm_ubus_regiter_init()")))
 int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx);
+
+__attribute__((deprecated("Use bbfdm_ubus_register_free() instead of bbfdm_ubus_regiter_free()")))
 int bbfdm_ubus_regiter_free(struct bbfdm_context *bbfdm_ctx);
 
 int bbfdm_print_data_model_schema(struct bbfdm_context *bbfdm_ctx, const enum bbfdm_type_enum type);

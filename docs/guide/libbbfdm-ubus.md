@@ -13,12 +13,12 @@ The `libbbfdm-ubus` library can be used by:
 
 The following APIs are provided by `libbbfdm-ubus` to expose the data model over ubus:
 
-### bbfdm_ubus_regiter_init
+### bbfdm_ubus_register_init
 
 This method initializes the `bbfdm_context` structure object and registers ubus data model methods.
 
 ```c
-int bbfdm_ubus_regiter_init(struct bbfdm_context *bbfdm_ctx)
+int bbfdm_ubus_register_init(struct bbfdm_context *bbfdm_ctx)
 
 Inputs:
     struct bbfdm_context *bbfdm_ctx
@@ -29,12 +29,12 @@ Returns:
         Returns 0 on success, or an error code if the registration fails.
 ```
 
-### bbfdm_ubus_regiter_free
+### bbfdm_ubus_register_free
 
 This method frees the `bbfdm_context` structure object.
 
 ```c
-int bbfdm_ubus_regiter_free(struct bbfdm_context *bbfdm_ctx)
+int bbfdm_ubus_register_free(struct bbfdm_context *bbfdm_ctx)
 
 Inputs:
     struct bbfdm_context *bbfdm_ctx
