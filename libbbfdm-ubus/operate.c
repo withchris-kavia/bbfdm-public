@@ -47,7 +47,8 @@ void bbfdm_operate_cmd(bbfdm_data_t *data, void *output)
 	}
 
 	/* Commit or Revert changes in uci files */
-	if (data->bbf_ctx.modified_uci_head != NULL) {
+	if (data->bbf_ctx.modified_uci_head != NULL &&
+		!list_empty(data->bbf_ctx.modified_uci_head)) {
 		struct dm_modified_uci *m;
 		struct blob_buf bb = {0};
 
