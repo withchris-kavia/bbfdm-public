@@ -409,12 +409,18 @@ static char *bbfdm_resolve_external_reference_via_dmmap(struct dmctx *ctx, const
 			 * We need to replace * with the parent instance number
 			 */
 			for (size_t i = 0; i < count; i++) {
+				/* Skip empty parts (e.g., trailing empty string from final dot) */
+				if (strlen(parts[i]) == 0)
+					continue;
 
 				if (i > 0 && strcmp(parts[i], "*") == 0) {
 					dmuci_get_value_by_section_string(dmmap_obj, parts[i - 1], &option_value);
-					path_offset += snprintf(reconstructed_path + path_offset,
-							sizeof(reconstructed_path) - path_offset,
-							"%s.", option_value);
+					/* Only add if option_value is valid and not empty */
+					if (option_value && strlen(option_value) > 0) {
+						path_offset += snprintf(reconstructed_path + path_offset,
+								sizeof(reconstructed_path) - path_offset,
+								"%s.", option_value);
+					}
 					continue;
 				}
 
