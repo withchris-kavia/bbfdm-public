@@ -24,6 +24,7 @@ typedef struct service_entry {
     char *name;
     enum bbfdmd_type_enum protocol;
     bool is_unified;
+	bool dm_framework; // Indicates if the service is managed by dm-framework
     size_t object_count;
     service_object_t *objects;
     int timeout; // Ubus timeout used to get data from lower layer
@@ -33,7 +34,7 @@ typedef struct service_entry {
 
 int register_services(struct ubus_context *ctx);
 void unregister_services(void);
-void list_registered_services(struct blob_buf *bb);
+void list_registered_services(struct blob_buf *bb, const char *filter_name, bool framework_only);
 void fill_service_schema(struct ubus_context *ubus_ctx, int ubus_timeout, const char *service_name, struct blob_buf **service_schema);
 
 bool service_path_match(const char *requested_path, unsigned int requested_proto, service_entry_t *service);
