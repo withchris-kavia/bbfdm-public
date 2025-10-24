@@ -23,7 +23,7 @@
 LIST_HEAD(registered_services);
 
 static void add_service_to_list(const char *name, struct blob_buf *dm_schema, int service_proto, int service_timeout,
-		service_object_t *objects, size_t count, bool is_unified)
+		service_object_t *objects, size_t count, bool is_unified, bool dm_framework)
 {
 	service_entry_t *service = NULL;
 
@@ -47,6 +47,7 @@ static void add_service_to_list(const char *name, struct blob_buf *dm_schema, in
 	service->objects = objects;
 	service->object_count = count;
 	service->is_unified = is_unified;
+	service->dm_framework = dm_framework;
 }
 
 static void receive_schema_result(struct ubus_request *req, int type __attribute__((unused)), struct blob_attr *msg)
@@ -153,8 +154,12 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 	fill_service_schema(ubus_ctx, 2000, service_name, &service_schema);
 
 	json_object *unified_daemon_jobj = NULL;
+	json_object *dm_framework_jobj = NULL;
 	json_object_object_get_ex(daemon_config, "unified_daemon", &unified_daemon_jobj);
 	bool is_unified = unified_daemon_jobj ? json_object_get_boolean(unified_daemon_jobj) : false;
+
+	json_object_object_get_ex(daemon_config, "dm-framework", &dm_framework_jobj);
+	bool dm_framework = dm_framework_jobj ? json_object_get_boolean(dm_framework_jobj) : false;
 
 	json_object *proto_jobj = NULL;
 	json_object_object_get_ex(daemon_config, "proto", &proto_jobj);
@@ -204,8 +209,8 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 		num_objs++;
 	}
 
-	BBFDM_INFO("Registering [%s :: %lu :: %d]", service_name, num_objs, is_unified);
-	add_service_to_list(service_name, service_schema, service_proto, service_timeout, objects, num_objs, is_unified);
+	BBFDM_INFO("Registering [%s :: %lu :: %d :: %d]", service_name, num_objs, is_unified, dm_framework);
+	add_service_to_list(service_name, service_schema, service_proto, service_timeout, objects, num_objs, is_unified, dm_framework);
 	json_object_put(json_root);
 	return 0;
 }
@@ -274,7 +279,7 @@ void unregister_services(void)
     }
 }
 
-void list_registered_services(struct blob_buf *bb)
+void list_registered_services(struct blob_buf *bb, const char *filter_name, bool framework_only)
 {
 	service_entry_t *service = NULL;
 
@@ -284,6 +289,12 @@ void list_registered_services(struct blob_buf *bb)
 	void *array = blobmsg_open_array(bb, "registered_services");
 
 	list_for_each_entry(service, &registered_services, list) {
+		if (filter_name && strlen(filter_name) > 0 && service->name && strcmp(filter_name, service->name) != 0)
+			continue;
+
+		if (framework_only && !service->dm_framework)
+			continue;
+
 		void *table = blobmsg_open_table(bb, NULL);
 
 		blobmsg_add_string(bb, "name", service->name ? service->name : "");
@@ -292,6 +303,7 @@ void list_registered_services(struct blob_buf *bb)
 			service->protocol == BBFDMD_CWMP ? "cwmp" : "both");
 
 		blobmsg_add_u8(bb, "unified_daemon", service->is_unified);
+		blobmsg_add_u8(bb, "dm_framework", service->dm_framework);
 		blobmsg_add_u8(bb, "blacklisted", service->is_blacklisted);
 		blobmsg_add_u32(bb, "timeout", service->timeout);
 
