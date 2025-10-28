@@ -1060,19 +1060,18 @@ int bbfdm_ubus_register_init(struct bbfdm_context *bbfdm_ctx)
 
 int bbfdm_ubus_register_free(struct bbfdm_context *bbfdm_ctx)
 {
-	free_apply_handlers(&bbfdm_ctx->config);
-	free_changed_uci(bbfdm_ctx);
-
 	if (bbfdm_ctx->ubus_ctx) {
 		ubus_unregister_event_handler(bbfdm_ctx->ubus_ctx, &bbfdm_ctx->apply_event);
 		free_ubus_event_handler(bbfdm_ctx->ubus_ctx, &bbfdm_ctx->event_handlers);
+		free_apply_handlers(&bbfdm_ctx->config);
+		free_changed_uci(bbfdm_ctx);
+		bbfdm_ctx_cleanup(bbfdm_ctx);
 	}
 
 	if (bbfdm_ctx->ubus_ctx && bbfdm_ctx->internal_ubus_ctx) {
 		ubus_free(bbfdm_ctx->ubus_ctx);
 		uloop_done();
 	}
-	bbfdm_ctx_cleanup(bbfdm_ctx);
 
 	return 0;
 }
