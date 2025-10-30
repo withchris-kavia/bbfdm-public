@@ -263,7 +263,7 @@ static int __dm_ubus_call_sync_entry(struct ubus_context *ubus_ctx, struct dm_ub
 
 	if (err != 0) {
 		const char *err_msg = (err >= 0 && err < __UBUS_STATUS_LAST) ? dm_ubus_str_error[err] : "Unknown error";
-		BBF_ERR("UBUS invoke failed [object: %s, method: %s, timeout: %d ms] with error (%s:%d)",
+		BBF_WARNING("UBUS invoke failed [object: %s, method: %s, timeout: %d ms] with error (%s:%d)",
 				obj, method, timeout, err_msg, err);
 
 		if (err == UBUS_STATUS_TIMEOUT) {
