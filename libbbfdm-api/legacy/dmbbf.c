@@ -896,16 +896,42 @@ static bool is_same_reference_path(const char *curr_value, const char *in_value)
 	char *pch = NULL, *pchr = NULL;
 	char resolved_path[2048] = {0};
 	char buf[2048] = {0};
-	unsigned pos = 0;
+	char cleaned_in_value[2048] = {0};
+	unsigned pos = 0, clean_pos = 0;
 
 	if (!curr_value || !in_value)
 		return false;
 
-	if (strcmp(curr_value, in_value) == 0)
+	DM_STRNCPY(buf, in_value, sizeof(buf));
+	for (pch = strtok_r(buf, ",", &pchr);
+			pch != NULL && clean_pos < sizeof(cleaned_in_value) - 1;
+			pch = strtok_r(NULL, ",", &pchr)) {
+
+		size_t len = strlen(pch);
+		while (len > 0 && pch[len - 1] == '.') {
+			pch[len - 1] = '\0';
+			len--;
+		}
+
+		int written = snprintf(&cleaned_in_value[clean_pos],
+				sizeof(cleaned_in_value) - clean_pos,
+				"%s,", pch);
+
+		if (written < 0 || written >= (int)(sizeof(cleaned_in_value) - clean_pos)) {
+			// Buffer full or error, stop appending
+			break;
+		}
+		clean_pos += written;
+	}
+	if (clean_pos > 0) {
+		cleaned_in_value[clean_pos - 1] = '\0'; // Remove trailing comma
+	}
+
+	// If curr_value matches cleaned_in_value directly
+	if (strcmp(curr_value, cleaned_in_value) == 0)
 		return true;
 
 	DM_STRNCPY(buf, curr_value, sizeof(buf));
-
 	char *is_list = strchr(buf, ';');
 
 	for (pch = strtok_r(buf, is_list ? ";" : ",", &pchr);
@@ -936,7 +962,8 @@ static bool is_same_reference_path(const char *curr_value, const char *in_value)
 		resolved_path[pos - 1] = 0; // Remove trailing comma
 	}
 
-	if (strcmp(resolved_path, in_value) == 0)
+	// Compare resolved_path with cleaned_in_value
+	if (strcmp(resolved_path, cleaned_in_value) == 0)
 		return true;
 
 	return false;

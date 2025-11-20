@@ -291,13 +291,20 @@ int bbfdm_get_reference_linker(struct dmctx *ctx, char *reference_path, struct d
 {
 	char hash_str[9] = {0};
 	char *uci_val = NULL;
+	size_t len = 0;
 
 	if (!reference_path || !reference_args)
 		return -1;
 
+	// Remove trailing dot if present
+	len = DM_STRLEN(reference_path);
+	if (len > 0 && reference_path[len - 1] == '.') {
+		reference_path[len - 1] = '\0';
+	}
+
 	reference_args->path = reference_path;
 
-	if (DM_STRLEN(reference_args->path) == 0)
+	if (len == 0)
 		return 0;
 
 	calculate_hash(reference_path, hash_str, sizeof(hash_str));
