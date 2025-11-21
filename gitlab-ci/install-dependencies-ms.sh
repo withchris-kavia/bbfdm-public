@@ -8,15 +8,17 @@ source ./gitlab-ci/shared.sh
 exec_cmd apt update
 exec_cmd pip3 install xlwt
 
+mkdir -p /etc/bbfdm/dmmap
 # Create directories for micro-service configuration and shared files
 [ ! -d "${BBFDM_MS_CONF}" ] && mkdir -p "${BBFDM_MS_CONF}"
 [ ! -d "${BBFDM_MS_DIR}" ] && mkdir -p "${BBFDM_MS_DIR}"
 
 # Clean up generated files
-rm -rf ${BBFDM_MS_DIR}/*
-rm -f ${BBFDM_MS_CONF}/*
-rm -f ${BBFDM_DMMAP_DIR}/*
+rm -rf "${BBFDM_MS_DIR:?}"/*
+rm -f "${BBFDM_MS_CONF}"/*
+rm -f "${BBFDM_DMMAP_DIR}"/*
 
+install_libeasy
 # compile and install Core Data Model as a micro-service
 install_libbbf ${1}
 
