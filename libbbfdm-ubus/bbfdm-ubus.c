@@ -358,13 +358,13 @@ int bbfdm_set_handler(struct ubus_context *ctx, struct ubus_object *obj,
 	fault = fill_pvlist_set(path, value, type, tb[DM_SET_OBJ_PATH], &pv_list);
 	if (fault) {
 		BBF_ERR("Fault in fill pvlist set path |%s| : |%d|", data.bbf_ctx.in_param, fault);
-		fill_err_code_array(&data, fault);
+		fill_err_code_array(&data, &data.bb, fault);
 		goto end;
 	}
 
 	if (list_empty(&pv_list)) {
 		BBF_ERR("Fault in fill pvlist set path |%s| : |list is empty|", data.bbf_ctx.in_param);
-		fill_err_code_array(&data, USP_FAULT_INTERNAL_ERROR);
+		fill_err_code_array(&data, &data.bb, USP_FAULT_INTERNAL_ERROR);
 		goto end;
 	}
 
@@ -495,7 +495,7 @@ int bbfdm_add_handler(struct ubus_context *ctx, struct ubus_object *obj,
 		fault = fill_pvlist_set(path, NULL, NULL, tb[DM_ADD_OBJ_PATH], &pv_list);
 		if (fault) {
 			BBF_ERR("Fault in fill pvlist set path |%s|", path);
-			fill_err_code_array(&data, USP_FAULT_INTERNAL_ERROR);
+			fill_err_code_array(&data, &data.bb, USP_FAULT_INTERNAL_ERROR);
 			free_pv_list(&pv_list);
 			goto end;
 		}
