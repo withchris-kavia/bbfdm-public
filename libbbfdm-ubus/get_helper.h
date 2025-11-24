@@ -34,7 +34,7 @@ void add_path_list(const char *param, struct list_head *plist);
 void free_path_list(struct list_head *plist);
 
 void fill_err_code_table(bbfdm_data_t *data, int fault);
-void fill_err_code_array(bbfdm_data_t *data, int fault);
+void fill_err_code_array(bbfdm_data_t *data, struct blob_buf *bb, int fault);
 
 void bb_add_string(struct blob_buf *bb, const char *name, const char *value);
 

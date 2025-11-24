@@ -20,7 +20,7 @@ bool validate_msglen(bbfdm_data_t *data)
 		BBF_ERR("Blob exceed max len(%d), data len(%zd)", DEF_IPC_DATA_LEN, data_len);
 		blob_buf_free(&data->bbf_ctx.bb);
 		blob_buf_init(&data->bbf_ctx.bb, 0);
-		fill_err_code_table(data, FAULT_9002);
+		fill_err_code_array(data, &data->bbf_ctx.bb, FAULT_9002);
 		return false;
 	}
 
