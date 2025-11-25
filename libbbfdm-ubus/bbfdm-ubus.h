@@ -50,6 +50,8 @@ int bbfdm_ubus_regiter_free(struct bbfdm_context *bbfdm_ctx);
 int bbfdm_print_data_model_schema(struct bbfdm_context *bbfdm_ctx, const enum bbfdm_type_enum type);
 
 void bbfdm_ubus_set_service_name(struct bbfdm_context *bbfdm_ctx, const char *srv_name);
+
+uint8_t bbfdm_ubus_get_log_level(void);
 void bbfdm_ubus_set_log_level(int log_level);
 void bbfdm_ubus_load_data_model(DM_MAP_OBJ *DynamicObj);
 int bbfdm_refresh_references(unsigned int dm_type, const char *srv_obj_name);
