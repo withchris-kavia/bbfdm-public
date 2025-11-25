@@ -256,6 +256,7 @@ static int get_schedule_alias(char *refparam, struct dmctx *ctx, void *data, cha
 static int set_schedule_alias(char *refparam, struct dmctx *ctx, void *data, char *instance, char *value, int action)
 {
 	int ret = 0;
+	char buffer[256] = {0};
 
 	switch (action) {
 	case VALUECHECK:
@@ -278,7 +279,8 @@ static int set_schedule_alias(char *refparam, struct dmctx *ctx, void *data, cha
 		break;
 	case VALUESET:
 		dmuci_rename_section_by_section(((struct dm_data *)data)->config_section, value);
-		dmuci_set_value_by_section(((struct dm_data *)data)->dmmap_section, "__section_name__", value);
+		snprintf(buffer, sizeof(buffer), "schedules.%s", value);
+		dmuci_set_value_by_section(((struct dm_data *)data)->dmmap_section, "__section_name__", buffer);
 		dmuci_set_value_by_section(((struct dm_data *)data)->dmmap_section, "Alias", value);
 		break;
 	}
