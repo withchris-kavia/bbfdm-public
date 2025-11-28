@@ -219,6 +219,15 @@ int dmuci_add_section_##UCI_PATH(const char *package, const char *stype, struct 
 	uci_ctx = save_uci_ctx;			\
 	return res;				\
 }\
+int dmuci_add_named_section_##UCI_PATH(const char *package, const char *stype, const char *name, struct uci_section **s)\
+{\
+	struct uci_context *save_uci_ctx;	\
+	save_uci_ctx = uci_ctx;			\
+	uci_ctx = uci_ctx_##UCI_PATH;	\
+	int res = dmuci_add_named_section(package, stype, name, s); \
+	uci_ctx = save_uci_ctx;			\
+	return res;				\
+}\
 int dmuci_delete_##UCI_PATH(const char *package, const char *section, const char *option, const char *value) \
 {\
 	struct uci_context *save_uci_ctx;	\
@@ -312,6 +321,7 @@ int dmuci_set_value(const char *package, const char *section, const char *option
 int dmuci_add_list_value(const char *package, const char *section, const char *option, const char *value);
 int dmuci_del_list_value(const char *package, const char *section, const char *option, const char *value);
 int dmuci_add_section(const char *package, const char *stype, struct uci_section **s);
+int dmuci_add_named_section(const char *package, const char *stype, const char *name, struct uci_section **s);
 int dmuci_delete(const char *package, const char *section, const char *option, const char *value);
 int dmuci_rename_section(const char *package, const char *section, const char *value);
 int dmuci_get_value_by_section_string(struct uci_section *s, const char *option, char **value);
@@ -333,6 +343,7 @@ int dmuci_set_value_bbfdm(const char *package, const char *section, const char *
 int dmuci_set_value_by_section_bbfdm(struct uci_section *s, const char *option, const char *value);
 int dmuci_add_list_value_bbfdm(const char *package, const char *section, const char *option, const char *value);
 int dmuci_add_section_bbfdm(const char *package, const char *stype, struct uci_section **s);
+int dmuci_add_named_section_bbfdm(const char *package, const char *stype, const char *name, struct uci_section **s);
 int dmuci_delete_bbfdm(const char *package, const char *section, const char *option, const char *value);
 int dmuci_delete_by_section_unnamed_bbfdm(struct uci_section *s, const char *option, const char *value);
 int dmuci_delete_by_section_bbfdm(struct uci_section *s, const char *option, const char *value);

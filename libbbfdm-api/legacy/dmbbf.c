@@ -728,7 +728,14 @@ struct uci_section *create_dmmap_obj(struct dmctx *dmctx, unsigned char instance
 
 		char *curr_instance = NULL;
 		dmuci_get_value_by_section_string(s, "__instance__", &curr_instance);
-		int curr_instance_int = (curr_instance && *curr_instance != '\0') ? DM_STRTOL(curr_instance) : 0;
+		if (DM_STRLEN(curr_instance) == 0) {
+			BBF_ERR("Found section without __instance__ in package: %s, section type: %s section name: %s. Deleting this entry",
+					section_config(s), section_type(s), section_name(s));
+			dmuci_delete_by_section(s, NULL, NULL);
+			continue;
+		}
+
+		int curr_instance_int = DM_STRTOL(curr_instance);
 		if (curr_instance_int > max_instance)
 			max_instance = curr_instance_int;
 
@@ -751,19 +758,20 @@ struct uci_section *create_dmmap_obj(struct dmctx *dmctx, unsigned char instance
 		char s_name[64] = {0};
 		int pos = 0;
 
-		dmuci_add_section_bbfdm(obj_file, obj_name, &dmmap_section);
-
 		for (int i = 0; i < instance_level; i++) {
-			dmuci_set_value_by_section(dmmap_section, dmctx->obj_buf[i], dmctx->inst_buf[i]);
 			pos += snprintf(&s_name[pos], sizeof(s_name) - pos, "%s_%s", dmctx->obj_buf[i], dmctx->inst_buf[i]);
 		}
 
 		snprintf(&s_name[pos], sizeof(s_name) - pos, "%s_%s", obj_name, *instance);
 
-		dmuci_rename_section_by_section(dmmap_section, s_name);
+		dmuci_add_named_section_bbfdm(obj_file, obj_name, s_name, &dmmap_section);
 
 		dmuci_set_value_by_section(dmmap_section, "__section_name__", config_sec_name);
 		dmuci_set_value_by_section(dmmap_section, "__instance__", *instance);
+
+		for (int i = 0; i < instance_level; i++) {
+			dmuci_set_value_by_section(dmmap_section, dmctx->obj_buf[i], dmctx->inst_buf[i]);
+		}
 	}
 
 	dmctx->obj_buf[instance_level] = obj_name;
@@ -820,6 +828,14 @@ int generic_browse(struct dmctx *dmctx, DMNODE *parent_node, void *prev_data, ch
 	uci_path_foreach_sections(bbfdm, parent_node->current_object_file, parent_node->obj->obj, curr_data.dmmap_section) {
 		char *config_sec_name = NULL;
 		bool is_same_parent = true;
+
+		// skip instances which has no __instance__
+		dmuci_get_value_by_section_string(curr_data.dmmap_section, "__instance__", &instance);
+		if (DM_STRLEN(instance) == 0) {
+			BBF_WARNING("Skipping object with no instance number in package: %s, section type: %s, section name: %s",
+				section_config(curr_data.dmmap_section), section_type(curr_data.dmmap_section), section_name(curr_data.dmmap_section));
+			continue;
+		}
 
 		for (int i = 0; i < parent_node->instance_level; i++) {
 			char *curr_obj_inst = NULL;

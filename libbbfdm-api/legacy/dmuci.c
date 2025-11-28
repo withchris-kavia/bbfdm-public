@@ -729,6 +729,7 @@ enum uci_oper_type {
 	UCI_OP_DEL,
 	UCI_OP_RENAME,
 	UCI_OP_REORDER,
+	UCI_OP_ADD_NAMED,
 	__UCI_OP_MAX
 };
 
@@ -760,6 +761,11 @@ static int __uci_perform_op(int operation, bbfdm_uci_op_data *op_data)
 	case UCI_OP_SET:
 		if (uci_set(op_data->ucictx, &ptr) != UCI_OK)
 			return -1;
+		break;
+	case UCI_OP_ADD_NAMED:
+		if (uci_set(op_data->ucictx, &ptr) != UCI_OK || ptr.s == NULL)
+			return -1;
+		*op_data->s = ptr.s;
 		break;
 	case UCI_OP_ADD_LIST:
 		if (uci_add_list(op_data->ucictx, &ptr) != UCI_OK)
@@ -848,6 +854,31 @@ int dmuci_add_section(const char *package, const char *stype, struct uci_section
 	conf_data.sec_type = stype;
 
 	return __uci_perform_op(UCI_OP_ADD, &conf_data);
+}
+
+int dmuci_add_named_section(const char *package, const char *stype, const char *name, struct uci_section **s)
+{
+	char fname[128];
+	bbfdm_uci_op_data conf_data = {0};
+
+	if (s == NULL)
+		return -1;
+
+	snprintf(fname, sizeof(fname), "%s/%s", uci_ctx->confdir, package);
+
+	if (create_empty_file(fname))
+		return -1;
+
+	*s = NULL;
+
+	conf_data.s = s;
+	conf_data.ucictx = uci_ctx;
+	conf_data.dmctx = get_bbfdm_global_dmctx();
+	conf_data.package = package;
+	conf_data.section = name;
+	conf_data.value = stype;
+
+	return __uci_perform_op(UCI_OP_ADD_NAMED, &conf_data);
 }
 
 /**** UCI DELETE by section pointer *****/
