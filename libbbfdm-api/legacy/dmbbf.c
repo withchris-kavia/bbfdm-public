@@ -805,13 +805,13 @@ char *handle_instance_without_section(struct dmctx *dmctx, DMNODE *parent_node, 
 	switch(parent_node->browse_type) {
 	case BROWSE_NORMAL:
 		dmasprintf(&instance, "%d", inst_nbr);
+		dmctx->obj_buf[parent_node->instance_level] = parent_node->obj->obj;
+		dmctx->inst_buf[parent_node->instance_level] = instance ? instance : "";
 		break;
 	case BROWSE_FIND_MAX_INST:
 	case BROWSE_NUM_OF_ENTRIES:
 		break;
 	}
-
-	dmctx->inst_buf[parent_node->instance_level] = instance ? instance : "";
 
 	return instance ? instance : "";
 }
