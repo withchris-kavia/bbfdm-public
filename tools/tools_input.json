@@ -353,7 +353,7 @@
       "unified_daemon": false,
       "compile": [
         "make -C src clean",
-        "make -C src"
+        "make -C src CFLAGS+='-DBBF_VENDOR_PREFIX=\\\"X_IOWRT_EU_\\\"' DHCPMNGR_ENABLE_VENDOR_EXT='y'"
       ],
       "post_install": [
         "cp -f src/libdhcpmngr.so /usr/share/bbfdm/micro_services/dhcpmngr.so",
