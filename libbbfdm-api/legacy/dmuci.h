@@ -122,9 +122,9 @@ struct package_change
 		section != NULL; \
 		section = _tmp, _tmp = (section) ? dmuci_walk_all_sections(package, section, GET_NEXT_SECTION) : NULL)
 
-#define section_name(s) s ? (s)->e.name : ""
-#define section_type(s) s ? (s)->type : ""
-#define section_config(s) s ? (s)->package->e.name : ""
+#define section_name(s) ((s) ? (s)->e.name : "")
+#define section_type(s) ((s) ? (s)->type : "")
+#define section_config(s) ((s) ? (s)->package->e.name : "" )
 
 static inline void uci_list_insert(struct uci_list *list, struct uci_list *ptr)
 {
@@ -371,4 +371,3 @@ bool dmuci_string_to_boolean(const char *value);
 bool dmuci_is_option_value_empty(struct uci_section *s, const char *option_name);
 
 #endif
-
