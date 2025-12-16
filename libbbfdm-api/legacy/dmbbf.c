@@ -19,6 +19,8 @@
 
 #define MAX_DM_PATH (1024)
 
+static void add_path(struct list_head *registered_db, const char *path, const char *value);
+
 char *DMT_TYPE[] = {
 	[DMT_STRING] = "xsd:string",
 	[DMT_UNINT] = "xsd:unsignedInt",
@@ -2134,86 +2136,212 @@ static json_object *register_new_db_json_obj(struct list_head *registered_db, co
 	return db_obj->json_obj;
 }
 
-/**
- * @brief Write a JSON object to a file safely using exclusive locking.
- *
- * This function serializes the given `json_object` to the specified file path
- * using json-c's pretty formatting. It ensures safe concurrent access by
- * acquiring an exclusive file lock (`LOCK_EX`) before writing, preventing
- * other processes from reading or writing the file during the operation.
- *
- * Key behavior:
- * - Opens the file for writing (creates it if it does not exist).
- * - Acquires an exclusive lock (`LOCK_EX`) using `flock()` to ensure
- *   no other process reads or writes during the write.
- * - Serializes the JSON object using json-c with pretty formatting.
- * - Ensures that any readers using shared locks (`LOCK_SH`) are blocked
- *   during the write to avoid partial or inconsistent reads.
- * - Writes the data to the file stream (`FILE*`) derived from the file
- *   descriptor.
- * - Automatically flushes and closes the file, releasing the lock.
- *
- * @param file_path Full path to the JSON file to write.
- * @param json_obj Pointer to the `json_object` to serialize and store.
- * @return 0 on success, -1 on failure (file open, locking, or writing error).
- *
- * @note Any readers accessing this file should use `flock()` with `LOCK_SH`
- *       to avoid reading partial or inconsistent data while a write is in
- *       progress.
- */
+// Helper function to check if target has any numeric keys
+static bool bbfdm_target_has_numeric_keys(json_object *target)
+{
+	json_object_object_foreach(target, key, val) {
+		(void)val; // Unused
+		if (isdigit_str(key)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// Helper function to delete numeric keys from target that are not in source
+static void bbfdm_delete_missing_numeric_keys(json_object *target, json_object *source)
+{
+	struct json_object_iterator it = json_object_iter_begin(target);
+	struct json_object_iterator it_end = json_object_iter_end(target);
+
+	// Use a fixed-size array for storing keys to be deleted
+	const char *keys_to_delete[BBF_MAX_OBJECT_INSTANCES] = {0};
+	int delete_count = 0;
+
+	// Collect numeric keys to delete
+	while (!json_object_iter_equal(&it, &it_end)) {
+		const char *target_key = json_object_iter_peek_name(&it);
+
+		if (isdigit_str(target_key)) {
+			if (!json_object_object_get_ex(source, target_key, NULL)) {
+				// Numeric key in target but not in source - mark for deletion
+				if (delete_count < BBF_MAX_OBJECT_INSTANCES) {
+					keys_to_delete[delete_count++] = target_key;
+				} else {
+					BBF_WARNING("Maximum key limit reached, some keys may not be deleted");
+					break;
+				}
+			}
+		}
+
+		json_object_iter_next(&it);
+	}
+
+	// Delete marked keys
+	for (int i = 0; i < delete_count; i++) {
+		json_object_object_del(target, keys_to_delete[i]);
+	}
+}
+
+// Helper function for recursive merge
+static void bbfdm_json_recursive_merge(json_object *target, json_object *source)
+{
+	if (!target || !source) {
+		return;
+	}
+
+	// Check if source has any numeric keys at this level
+	bool source_has_numeric_keys = false;
+	json_object_object_foreach(source, check_key, check_val) {
+		(void)check_val; // Unused
+		if (isdigit_str(check_key)) {
+			source_has_numeric_keys = true;
+			break;
+		}
+	}
+
+	// If source is an empty object and target has numeric keys,
+	// we should delete all numeric keys from target
+	bool source_is_empty = (json_object_object_length(source) == 0);
+	bool target_has_numeric_keys = false;
+
+	if (source_is_empty) {
+		target_has_numeric_keys = bbfdm_target_has_numeric_keys(target);
+	}
+
+	// If source has numeric keys OR (source is empty AND target has numeric keys),
+	// clean up target's numeric keys
+	if (source_has_numeric_keys || (source_is_empty && target_has_numeric_keys)) {
+		bbfdm_delete_missing_numeric_keys(target, source);
+	}
+
+	// Iterate through keys in source and merge/update
+	json_object_object_foreach(source, key, source_val) {
+		json_object *target_val = NULL;
+
+		if (json_object_object_get_ex(target, key, &target_val)) {
+			// Key exists in both target and source
+			if (json_object_is_type(source_val, json_type_object) &&
+			    json_object_is_type(target_val, json_type_object)) {
+				// Both are objects - recursively merge
+				bbfdm_json_recursive_merge(target_val, source_val);
+			} else {
+				// Not both objects - replace target value with source value
+				json_object_object_add(target, key, json_object_get(source_val));
+			}
+		} else {
+			// Key doesn't exist in target - add it
+			json_object_object_add(target, key, json_object_get(source_val));
+		}
+	}
+}
+
 static int bbfdm_json_object_to_file(const char *file_path, json_object *json_obj)
 {
-	// Open file for writing (create if it doesn't exist, truncate if it does)
-	int fd = open(file_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	json_object *existing_json = NULL;
+	json_object *merged_json = NULL;
+	int result = -1;
+	int fd = -1;
+	FILE *fp = NULL;
+
+	// Open file for reading and writing (create if it doesn't exist)
+	fd = open(file_path, O_RDWR | O_CREAT, 0644);
 	if (fd == -1) {
-		BBF_ERR("Failed to open file for writing: %s", file_path);
+		BBF_ERR("Failed to open file: %s", file_path);
 		return -1;
 	}
 
-	// Acquire exclusive lock to prevent simultaneous writes
+	// Acquire exclusive lock BEFORE reading to prevent race condition
 	if (flock(fd, LOCK_EX) == -1) {
 		BBF_ERR("Failed to lock file: %s", file_path);
 		close(fd);
 		return -1;
 	}
 
-	// Associate a FILE* stream with the file descriptor
-	FILE *fp = fdopen(fd, "w");
-	if (!fp) {
-		BBF_ERR("fdopen failed on file: %s", file_path);
-		close(fd); // Releases the lock as well
-		return -1;
+	// Now that we have the lock, safely read the existing file content
+	struct stat st;
+	if (fstat(fd, &st) == 0 && st.st_size > 0) {
+		// File has content, read it
+		existing_json = json_object_from_fd(fd);
 	}
 
-	// Serialize JSON object to string
-	const char *json_str = json_object_to_json_string_ext(json_obj, JSON_C_TO_STRING_PRETTY);
+	// Perform merge
+	if (existing_json) {
+		// Create a copy of existing JSON to modify
+		const char *existing_str = json_object_to_json_string(existing_json);
+		merged_json = json_tokener_parse(existing_str);
+		json_object_put(existing_json);
+
+		if (!merged_json) {
+			BBF_INFO("Failed to create copy of existing JSON");
+			close(fd);
+			return -1;
+		}
+
+		// Perform recursive merge
+		bbfdm_json_recursive_merge(merged_json, json_obj);
+	} else {
+		// File doesn't exist or is empty
+		merged_json = json_object_get(json_obj);
+	}
+
+	// Truncate file before writing (we still hold the lock)
+	if (ftruncate(fd, 0) == -1) {
+		BBF_ERR("Failed to truncate file: %s", file_path);
+		goto cleanup;
+	}
+
+	// Seek to beginning
+	if (lseek(fd, 0, SEEK_SET) == -1) {
+		BBF_ERR("Failed to seek to beginning: %s", file_path);
+		goto cleanup;
+	}
+
+	// Associate a FILE* stream with the file descriptor for writing
+	fp = fdopen(fd, "w");
+	if (!fp) {
+		BBF_ERR("fdopen failed on file: %s", file_path);
+		goto cleanup;
+	}
+
+	// Serialize merged JSON object to string
+	const char *json_str = json_object_to_json_string_ext(merged_json, JSON_C_TO_STRING_PRETTY);
 	if (!json_str) {
 		BBF_ERR("Failed to serialize JSON object");
-		fclose(fp); // Closes fd and releases lock
-		return -1;
+		goto cleanup;
 	}
 
 	// Write JSON string to file
 	if (fprintf(fp, "%s\n", json_str) < 0) {
 		BBF_ERR("Failed to write JSON to file: %s", file_path);
-		fclose(fp); // Closes fd and releases lock
-		return -1;
+		goto cleanup;
 	}
 
 	// Flush FILE* buffer and sync file descriptor to disk
-	if (fflush(fp) != 0 || fsync(fd) != 0) {
+	if (fflush(fp) != 0 || fsync(fileno(fp)) != 0) {
 		BBF_ERR("Failed to flush/sync JSON file: %s", file_path);
-		fclose(fp); // Closes fd and releases lock
-		return -1;
+		goto cleanup;
+	}
+
+	result = 0; // Success
+
+cleanup:
+	// Clean up merged JSON object
+	if (merged_json) {
+		json_object_put(merged_json);
 	}
 
 	// Close stream (also closes file descriptor and releases lock)
-	if (fclose(fp) != 0) {
-		BBF_ERR("Failed to close file: %s", file_path);
-		return -1;
+	if (fp) {
+		if (fclose(fp) != 0 && result == 0) {
+			BBF_ERR("Failed to close file: %s", file_path);
+			result = -1;
+		}
+	} else if (fd != -1) {
+		close(fd);
 	}
 
-	return 0;
+	return result;
 }
 
 static void retry_write_cb(struct uloop_timeout *t)
@@ -2277,6 +2405,38 @@ static void write_unregister_db_json_objs(struct list_head *registered_db)
 
 static int mobj_get_references_db(DMOBJECT_ARGS)
 {
+	if (!node->obj->browseinstobj)
+		return 0;
+
+	struct dm_leaf_s *leaf = node->obj->leaf;
+
+	for (; (leaf && leaf->parameter); leaf++) {
+		if (leaf->dm_flags & DM_FLAG_LINKER) {
+			add_path((struct list_head *)dmctx->addobj_instance, node->current_object, NULL);
+			return 0;
+		}
+	}
+
+	if (node->obj->dynamicleaf == NULL) {
+		return 0;
+	}
+
+	for (int i = 0; i < __INDX_DYNAMIC_MAX; i++) {
+		struct dm_dynamic_leaf *dyn_array = node->obj->dynamicleaf + i;
+		if (dyn_array->nextleaf == NULL)
+			continue;
+
+		for (int j = 0; dyn_array->nextleaf[j]; j++) {
+			DMLEAF *dyn_leaf = dyn_array->nextleaf[j];
+			for (; (dyn_leaf && dyn_leaf->parameter); dyn_leaf++) {
+				if (dyn_leaf->dm_flags & DM_FLAG_LINKER) {
+					add_path((struct list_head *)dmctx->addobj_instance, node->current_object, NULL);
+					return 0;
+				}
+			}
+		}
+	}
+
 	return 0;
 }
 
@@ -2284,7 +2444,7 @@ static void add_path(struct list_head *registered_db, const char *path, const ch
 {
 	size_t count = 0;
 
-	if (!path || !value)
+	if (DM_STRLEN(path) == 0)
 		return;
 
 	char **parts = strsplit(path, ".", &count);
@@ -2292,7 +2452,7 @@ static void add_path(struct list_head *registered_db, const char *path, const ch
 	if (count < 2)
 		return;
 
-	// Path should be like: Device.X.Y.Z, so file name should use the second level which is X.json
+	// Path should be like: Device.X.Y.Z or Device.X.Y., so file name should use the second level which is X.json
 	json_object *curr = find_db_json_obj(registered_db, parts[1]);
 	if (curr == NULL) {
 		curr = register_new_db_json_obj(registered_db, parts[1]);
@@ -2304,7 +2464,7 @@ static void add_path(struct list_head *registered_db, const char *path, const ch
 	for (int i = 0; i < count; i++) {
 		const char *key = parts[i];
 
-		if (i == count - 1) {
+		if (i == count - 1 && value != NULL) {
 			json_object_object_add(curr, key, json_object_new_string(value));
 		} else {
 			json_object *next = NULL;
