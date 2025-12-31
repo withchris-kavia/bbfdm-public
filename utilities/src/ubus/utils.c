@@ -36,7 +36,7 @@ static struct proto_args supported_protocols[] = {
 		},
 };
 
-static void add_external_action_list(struct list_head *action_list, struct list_head *ext_handler, const char *file_path)
+static void add_external_action_list(struct list_head *action_list, struct list_head *ext_handler, const char *file_path, bool add_default_handler)
 {
 	if (file_path == NULL || strlen(file_path) == 0 || action_list == NULL)
 		return;
@@ -92,10 +92,10 @@ static void add_external_action_list(struct list_head *action_list, struct list_
 		}
 	}
 
-	if (ext_exist == true || strncmp(file_path, DMMAP_CONFDIR, strlen(DMMAP_CONFDIR)) == 0) {
+	if (add_default_handler == false || ext_exist == true || strncmp(file_path, DMMAP_CONFDIR, strlen(DMMAP_CONFDIR)) == 0) {
 		/* external handler exist, so already added in list or
-		 * the file is a dmmap file so it has no default handler
-		 * to add in the action list */
+		 * the file is a dmmap file so it has no default handler to add in the action list or
+		 * has been asked to do not add default handler generally in case of revert */
 		return;
 	}
 
@@ -324,12 +324,17 @@ void reload_specified_services(struct ubus_context *ctx, int idx, struct blob_at
 			}
 		}
 
-		if (is_commit && is_dmmap) {
-			add_external_action_list(action_list, handler_list, file_path);
-		}
+		if (is_commit == false) { // If revert operation
+			add_external_action_list(action_list, handler_list, file_path, false);
+		} else { // If commit operation
+			if (is_dmmap) {
+				add_external_action_list(action_list, handler_list, file_path, true);
+			}
 
-		if (reload && !is_dmmap) {
-			add_external_action_list(action_list, handler_list, file_path);
+			if (reload && !is_dmmap) {
+				// If reload is false then do not reload service
+				add_external_action_list(action_list, handler_list, file_path, true);
+			}
 		}
 	}
 
@@ -394,10 +399,11 @@ void reload_all_services(struct ubus_context *ctx, int idx, bool is_commit,
 				ULOG_ERR("Failed to revert changes for config '%s'", *p);
 				continue;
 			}
+			add_external_action_list(action_list, handler_list, file_path, false);
 		}
 
-		if (reload) {
-			add_external_action_list(action_list, handler_list, file_path);
+		if (is_commit && reload) {
+			add_external_action_list(action_list, handler_list, file_path, true);
 		}
 	}
 
@@ -450,6 +456,9 @@ void uci_apply_changes_dmmap(int idx, bool is_commit, struct list_head *action_l
 			continue;
 		}
 
+		char file_path[1024] = {0};
+		snprintf(file_path, sizeof(file_path), "%s%s", DMMAP_CONFDIR, *p);
+
 		if (is_commit) {
 			ULOG_DEBUG("Committing changes for config '%s'", *p);
 			if (uci_commit(uci_ctx, &ptr.p, false) != UCI_OK) {
@@ -457,15 +466,15 @@ void uci_apply_changes_dmmap(int idx, bool is_commit, struct list_head *action_l
 				continue;
 			}
 
-			char file_path[1024] = {0};
-			snprintf(file_path, sizeof(file_path), "%s%s", DMMAP_CONFDIR, *p);
-			add_external_action_list(action_list, ext_handler, file_path);
+			add_external_action_list(action_list, ext_handler, file_path, true);
 		} else {
 			ULOG_DEBUG("Reverting changes for config '%s'", *p);
 			if (uci_revert(uci_ctx, &ptr) != UCI_OK) {
 				ULOG_ERR("Failed to revert changes for config '%s'", *p);
 				continue;
 			}
+
+			add_external_action_list(action_list, ext_handler, file_path, false);
 		}
 	}
 

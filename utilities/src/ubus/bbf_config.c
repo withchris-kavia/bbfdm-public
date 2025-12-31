@@ -64,6 +64,7 @@ struct bbf_config_async_req {
 
 static struct blob_buf g_critical_bb;
 static struct list_head g_apply_handlers;
+static struct list_head g_revert_handlers;
 
 #ifdef BBF_CONFIG_DEBUG
 static void log_instance(struct instance *inst)
@@ -788,8 +789,10 @@ static int bbf_config_revert_handler(struct ubus_context *ctx, struct ubus_objec
 {
 	struct blob_attr *tb[__MAX];
 	unsigned char idx = 0;
+	struct list_head action_list;
 
 	ULOG_INFO("Revert handler called");
+	INIT_LIST_HEAD(&action_list);
 
 	if (blobmsg_parse(bbf_config_policy, __MAX, tb, blob_data(msg), blob_len(msg))) {
 		send_reply(ctx, req, "error", "Failed to parse blob");
@@ -808,12 +811,36 @@ static int bbf_config_revert_handler(struct ubus_context *ctx, struct ubus_objec
 
 	if (arr_len) {
 		ULOG_INFO("Reverting specified services");
-		reload_specified_services(ctx, idx, services, false, false, NULL, NULL, NULL);
+		reload_specified_services(ctx, idx, services, false, false, &action_list, &g_revert_handlers, NULL);
 	} else {
 		ULOG_INFO("Reverting changes to dmmap UCI config");
-		uci_apply_changes_dmmap(idx, false, NULL, NULL); // revert dmmap changes
+		uci_apply_changes_dmmap(idx, false, &action_list, &g_revert_handlers); // revert dmmap changes
 		ULOG_INFO("Reverting all services");
-		reload_all_services(ctx, idx, false, false, NULL, NULL, NULL);
+		reload_all_services(ctx, idx, false, false, &action_list, &g_revert_handlers, NULL);
+	}
+
+	struct action_node *node = NULL, *tmp = NULL;
+	list_for_each_entry_safe(node, tmp, &action_list, list) {
+		char cmd[4096] = {0};
+		unsigned pos = 0;
+
+		ULOG_INFO("Calling external revert handlers");
+
+		if (!file_exists(node->action)) {
+			list_del(&node->list);
+			FREE(node);
+			continue;
+		}
+
+		pos += snprintf(cmd, sizeof(cmd), "sh %s", node->action);
+
+		for (int i = 0; i < node->idx; i++) {
+			pos += snprintf(&cmd[pos], sizeof(cmd) - pos, " %s", node->arg[i]);
+		}
+
+		exec_apply_handler_script(cmd);
+		list_del(&node->list);
+		FREE(node);
 	}
 
 	ULOG_INFO("Sending success response");
@@ -927,11 +954,20 @@ static int compare(const struct dirent **a, const struct dirent **b)
 	return strcasecmp((*a)->d_name, (*b)->d_name); // If lengths are equal, sort alphabetically
 }
 
-static void free_apply_handlers()
+static void free_apply_revert_handlers()
 {
 	struct applier_node *node = NULL, *tmp = NULL;
 
 	list_for_each_entry_safe(node, tmp, &g_apply_handlers, list) {
+		list_del(&node->list);
+		FREE(node->file_path);
+		FREE(node->action);
+		FREE(node);
+	}
+
+	node = NULL;
+	tmp = NULL;
+	list_for_each_entry_safe(node, tmp, &g_revert_handlers, list) {
 		list_del(&node->list);
 		FREE(node->file_path);
 		FREE(node->action);
@@ -958,77 +994,81 @@ static void __load_handlers(const char *file)
 		return;
 	}
 
-	json_object *apply_handler = NULL;
-	json_object_object_get_ex(daemon_config, "apply_handler", &apply_handler);
-	if (!apply_handler) {
-		json_object_put(json_root);
-		return;
-	}
-
 	char type[2][8] = { "dmmap", "uci" };
+	char method[2][15] = { "apply_handler", "revert_handler" };
+	struct list_head *handler_list[2] = { &g_apply_handlers, &g_revert_handlers };
 
-	for (int i = 0; i < 2; i++) {
-		json_object *array = NULL;
-
-		if (!json_object_object_get_ex(apply_handler, type[i], &array) ||
-		    json_object_get_type(array) != json_type_array) {
+	// Load apply/revert handlers
+	for (int x = 0; x < 2; x++) {
+		json_object *m_handler = NULL;
+		json_object_object_get_ex(daemon_config, method[x], &m_handler);
+		if (!m_handler) {
 			continue;
 		}
 
-		size_t count = json_object_array_length(array);
-		for (size_t j = 0; j < count; j++) {
-			json_object *hndl_obj = json_object_array_get_idx(array, j);
-			json_object *files = NULL, *handler = NULL;
+		for (int i = 0; i < 2; i++) {
+			json_object *array = NULL;
 
-			json_object_object_get_ex(hndl_obj, "external_handler", &handler);
-			if (!handler) {
+			if (!json_object_object_get_ex(m_handler, type[i], &array) ||
+			    json_object_get_type(array) != json_type_array) {
 				continue;
 			}
 
-			const char *action = json_object_get_string(handler);
-			if (strlen(action) == 0 || !file_exists(action)) {
-				continue;
-			}
+			size_t count = json_object_array_length(array);
+			for (size_t j = 0; j < count; j++) {
+				json_object *hndl_obj = json_object_array_get_idx(array, j);
+				json_object *files = NULL, *handler = NULL;
 
-			json_object_object_get_ex(hndl_obj, "file", &files);
-			if (!files || json_object_get_type(files) != json_type_array) {
-				continue;
-			}
-
-			size_t f_count = json_object_array_length(files);
-			for (size_t k = 0; k < f_count; k++) {
-				char path[1024] = {0};
-
-				json_object *f_inst = json_object_array_get_idx(files, k);
-				snprintf(path, sizeof(path), "/etc/%s/%s",
-					(strcmp(type[i], "uci") == 0) ? "config" : "bbfdm/dmmap", json_object_get_string(f_inst));
-
-
-				// check if already present
-				bool exist = false;
-				struct applier_node *node = NULL;
-				list_for_each_entry(node, &g_apply_handlers, list) {
-					if (strcmp(node->file_path, path) == 0 && strcmp(node->action, action) == 0) {
-						exist = true;
-						break;
-					}
-				}
-
-				if (exist == true)
+				json_object_object_get_ex(hndl_obj, "external_handler", &handler);
+				if (!handler) {
 					continue;
-
-				node = (struct applier_node *)calloc(1, sizeof(struct applier_node));
-				if (node == NULL) {
-					ULOG_INFO("Failed to allocate memory for apply handlers");
-					json_object_put(json_root);
-					return;
 				}
 
-				INIT_LIST_HEAD(&node->list);
-				list_add_tail(&node->list, &g_apply_handlers);
+				const char *action = json_object_get_string(handler);
+				if (strlen(action) == 0 || !file_exists(action)) {
+					continue;
+				}
 
-				node->file_path = strdup(path);
-				node->action = strdup(action);
+				json_object_object_get_ex(hndl_obj, "file", &files);
+				if (!files || json_object_get_type(files) != json_type_array) {
+					continue;
+				}
+
+				size_t f_count = json_object_array_length(files);
+				for (size_t k = 0; k < f_count; k++) {
+					char path[1024] = {0};
+
+					json_object *f_inst = json_object_array_get_idx(files, k);
+					snprintf(path, sizeof(path), "/etc/%s/%s",
+						(strcmp(type[i], "uci") == 0) ? "config" : "bbfdm/dmmap",
+						json_object_get_string(f_inst));
+
+					// check if already present
+					bool exist = false;
+					struct applier_node *node = NULL;
+					list_for_each_entry(node, handler_list[x], list) {
+						if (strcmp(node->file_path, path) == 0 && strcmp(node->action, action) == 0) {
+							exist = true;
+							break;
+						}
+					}
+
+					if (exist == true)
+						continue;
+
+					node = (struct applier_node *)calloc(1, sizeof(struct applier_node));
+					if (node == NULL) {
+						ULOG_INFO("Failed to allocate memory for apply handlers");
+						json_object_put(json_root);
+						return;
+					}
+
+					INIT_LIST_HEAD(&node->list);
+					list_add_tail(&node->list, handler_list[x]);
+
+					node->file_path = strdup(path);
+					node->action = strdup(action);
+				}
 			}
 		}
 	}
@@ -1037,11 +1077,12 @@ static void __load_handlers(const char *file)
 	return;
 }
 
-static void load_apply_handlers()
+static void load_apply_revert_handlers()
 {
 	struct dirent **namelist;
 
 	INIT_LIST_HEAD(&g_apply_handlers);
+	INIT_LIST_HEAD(&g_revert_handlers);
 
 	int num_files = scandir(BBFDM_MICROSERVICE_INPUT_PATH, &namelist, filter, compare);
 
@@ -1105,7 +1146,7 @@ int main(int argc, char **argv)
 	ubus_add_uloop(uctx);
 
 	load_critical_services();
-	load_apply_handlers();
+	load_apply_revert_handlers();
 
 	INIT_LIST_HEAD(&g_external_changed_uci);
 
@@ -1122,7 +1163,7 @@ int main(int argc, char **argv)
 	uloop_run();
 
 exit:
-	free_apply_handlers();
+	free_apply_revert_handlers();
 	free_changed_uci_list(&g_external_changed_uci);
 	blob_buf_free(&g_critical_bb);
 	uloop_done();
