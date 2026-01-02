@@ -31,9 +31,13 @@
       },
       {
         "parent_dm": "Device.",
-        "object": "{BBF_VENDOR_PREFIX}OpenVPN",
+        "object": "X_IOWRT_EU_OpenVPN",
         "proto": "usp"
-      },	  
+      },
+      {
+        "parent_dm": "Device.",
+        "object": "X_IOWRT_EU_Dropbear"
+      },
       {
         "parent_dm": "Device.",
         "object": "RootDataModelVersion"
