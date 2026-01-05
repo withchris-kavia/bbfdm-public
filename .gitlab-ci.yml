@@ -103,6 +103,7 @@ run_libbbfdm_memory_test:
   artifacts:
       when: always
       paths:
+          - bbfdm*.log
           - output-report-device-get.txt
           - memory-*.xml
 
@@ -120,6 +121,7 @@ run_bbfd_functional_test:
         reports:
             junit: ./report/*.xml
         paths:
+            - bbfdm*.log
             - funl-result.log
             - funl-test-coverage.xml
             - report/
