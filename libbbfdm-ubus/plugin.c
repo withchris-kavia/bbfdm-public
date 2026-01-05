@@ -102,6 +102,10 @@ int bbfdm_load_dotso_plugin(struct bbfdm_context *bbfdm_ctx, void **lib_handle, 
 	//Dynamic Object
 	*(void **) (&dynamic_obj) = dlsym(handle, "tDynamicObj");
 
+	if (INTERNAL_ROOT_TREE == NULL) {
+		INTERNAL_ROOT_TREE = dynamic_obj;
+	}
+
 	return bbfdm_load_internal_plugin(bbfdm_ctx, dynamic_obj, main_entry);
 }
 
