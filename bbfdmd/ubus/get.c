@@ -30,17 +30,6 @@ static void prepare_and_send_response(struct async_request_context *ctx)
 
 	blobmsg_close_array(&ctx->tmp_bb, ctx->array);
 
-	struct list_uci_modified *list_node = NULL, *tmp = NULL;
-	void *array = blobmsg_open_array(&ctx->tmp_bb, "modified_uci");
-
-	list_for_each_entry_safe(list_node, tmp, &ctx->uci_modified, list) {
-		blobmsg_add_string(&ctx->tmp_bb, "", list_node->file_path);
-		list_del(&list_node->list);
-		BBFDM_FREE(list_node);
-	}
-
-	blobmsg_close_array(&ctx->tmp_bb, array);
-
 	if (strcmp(ctx->ubus_method, "get") == 0 && ctx->raw_format == false) { // Pretty Format
 		struct blob_buf bb_pretty = {0};
 
@@ -76,41 +65,11 @@ static void append_response_data(struct ubus_request_tracker *tracker, struct bl
 		return;
 
 	struct blob_attr *results = get_results_array(msg);
-	if (results) {
-		blobmsg_for_each_attr(attr, results, remaining) {
-			blobmsg_add_blob(&tracker->ctx->tmp_bb, attr);
-		}
-	}
+	if (!results)
+		return;
 
-	struct blob_attr *modified_uci = get_modified_uci_array(msg);
-	if (modified_uci) {
-		bool exist = false;
-		struct list_uci_modified *list_node = NULL;
-
-		attr = NULL;
-		remaining = 0;
-
-		blobmsg_for_each_attr(attr, modified_uci, remaining) {
-			list_for_each_entry(list_node, &tracker->ctx->uci_modified, list) {
-				if (strcmp(list_node->file_path, blobmsg_get_string(attr)) == 0) {
-					exist = true;
-					break;
-				}
-			}
-
-			if (exist == true)
-				continue;
-
-			list_node = (struct list_uci_modified *)calloc(1, sizeof(struct list_uci_modified));
-			if (list_node == NULL) {
-				BBFDM_INFO("Failed to allocate memory in get response handler for changed uci");
-				continue;
-			}
-
-			INIT_LIST_HEAD(&list_node->list);
-			list_add_tail(&list_node->list, &tracker->ctx->uci_modified);
-			snprintf(list_node->file_path, sizeof(list_node->file_path), "%s", blobmsg_get_string(attr));
-		}
+	blobmsg_for_each_attr(attr, results, remaining) {
+		blobmsg_add_blob(&tracker->ctx->tmp_bb, attr);
 	}
 }
 

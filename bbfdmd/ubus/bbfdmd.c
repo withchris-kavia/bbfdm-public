@@ -294,8 +294,6 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 	context->ubus_ctx = ctx;
 	context->raw_format = raw_format;
 
-	INIT_LIST_HEAD(&context->uci_modified);
-
 	memset(&context->tmp_bb, 0, sizeof(struct blob_buf));
 	blob_buf_init(&context->tmp_bb, 0);
 

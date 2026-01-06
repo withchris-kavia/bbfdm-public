@@ -42,16 +42,6 @@ void bbfdm_get(bbfdm_data_t *data, int method)
 
 	blobmsg_close_array(&data->bbf_ctx.bb, array);
 
-	array = blobmsg_open_array(&data->bbf_ctx.bb, "modified_uci");
-	if (data->bbf_ctx.modified_uci_head != NULL) {
-		struct dm_modified_uci *m;
-		list_for_each_entry(m, data->bbf_ctx.modified_uci_head, list) {
-			bb_add_string(&data->bbf_ctx.bb, "", m->uci_file);
-		}
-	}
-
-	blobmsg_close_array(&data->bbf_ctx.bb, array);
-
 	if (!validate_msglen(data)) {
 		BBF_ERR("IPC failed for path(%s)", data->bbf_ctx.in_param);
 	}
@@ -60,10 +50,8 @@ void bbfdm_get(bbfdm_data_t *data, int method)
 		ubus_send_reply(data->ctx, data->req, data->bbf_ctx.bb.head);
 	}
 
-	// Apply all bbfdm dmmap changes
-	if (data->bbf_ctx.dm_type == BBFDM_BOTH) {
-		dmuci_commit_bbfdm();
-	}
+	// Apply all bbfdm changes
+	dmuci_commit_bbfdm();
 
 	bbf_cleanup(&data->bbf_ctx);
 }

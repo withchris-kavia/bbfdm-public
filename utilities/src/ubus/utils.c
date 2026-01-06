@@ -105,7 +105,7 @@ static void add_external_action_list(struct list_head *action_list, struct list_
 	bool arg_exist = false;
 
 	list_for_each_entry(act_node, action_list, list) {
-		if (strcmp(act_node->action, DEFAULT_HANDLER_ACT) == 0) {
+		if (strcmp(app_node->action, DEFAULT_HANDLER_ACT) == 0) {
 			node_exist = true;
 			for (int i = 0; i < act_node->idx; i++) {
 				if (strcmp(act_node->arg[i], config) == 0) {

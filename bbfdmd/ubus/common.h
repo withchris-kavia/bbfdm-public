@@ -39,7 +39,6 @@ unsigned int get_proto_type(const char *proto);
 void fill_optional_input(struct blob_attr *msg, unsigned int *proto, bool *raw_format);
 
 struct blob_attr *get_results_array(struct blob_attr *msg);
-struct blob_attr *get_modified_uci_array(struct blob_attr *msg);
 
 bool str_match(const char *string, const char *pattern, size_t nmatch, regmatch_t pmatch[]);
 bool proto_match(unsigned int dm_type, const enum bbfdmd_type_enum type);
