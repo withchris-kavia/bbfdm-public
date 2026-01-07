@@ -28,6 +28,7 @@
 
 extern DMOBJ *DEAMON_DM_ROOT_OBJ;
 extern DM_MAP_OBJ *INTERNAL_ROOT_TREE;
+extern bool G_SERVICE_BOOTSTRAP;
 
 bool validate_msglen(bbfdm_data_t *data);
 

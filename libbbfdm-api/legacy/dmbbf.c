@@ -2483,14 +2483,14 @@ static int mparam_get_references_db(DMPARAM_ARGS)
 	if (node->is_instanceobj == 0)
 		return 0;
 
+	char full_param[MAX_DM_PATH] = {0};
+	char *value = dmstrdup("");
+
+	snprintf(full_param, sizeof(full_param), "%s%s", node->current_object, leaf->parameter);
+
+	(leaf->getvalue)(full_param, dmctx, data, instance, &value);
+
 	if (leaf->dm_flags & DM_FLAG_LINKER) {
-		char full_param[MAX_DM_PATH] = {0};
-		char *value = dmstrdup("");
-
-		snprintf(full_param, sizeof(full_param), "%s%s", node->current_object, leaf->parameter);
-
-		(leaf->getvalue)(full_param, dmctx, data, instance, &value);
-
 		add_path((struct list_head *)dmctx->addobj_instance, full_param, value);
 	}
 

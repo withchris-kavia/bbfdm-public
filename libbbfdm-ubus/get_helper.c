@@ -19,6 +19,7 @@
 
 DMOBJ *DEAMON_DM_ROOT_OBJ = NULL;
 DM_MAP_OBJ *INTERNAL_ROOT_TREE = NULL;
+bool G_SERVICE_BOOTSTRAP = true;
 
 int bbfdm_cmd_exec(struct dmctx *bbf_ctx, int cmd)
 {

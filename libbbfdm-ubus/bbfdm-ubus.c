@@ -1117,6 +1117,28 @@ int bbfdm_refresh_references(unsigned int dm_type, const char *srv_obj_name)
 
 	bbf_init(&bbf_ctx);
 	int res = bbfdm_cmd_exec(&bbf_ctx, BBF_REFERENCES_DB);
+
+	if (G_SERVICE_BOOTSTRAP == true) {
+		G_SERVICE_BOOTSTRAP = false;
+
+		if (bbf_ctx.modified_uci_head != NULL) {
+			struct dm_modified_uci *m;
+			list_for_each_entry(m, bbf_ctx.modified_uci_head, list) {
+				char *p = NULL;
+
+				if (DM_STRNCMP(m->uci_file, "/etc/bbfdm/dmmap/", 17) != 0)
+					continue;
+
+				p = m->uci_file + 17;
+				if (DM_STRLEN(p) == 0)
+					continue;
+
+				BBF_INFO("Commit dmmap file: %s at INIT on refresh_reference", p);
+				dmuci_commit_package_bbfdm(p);
+			}
+		}
+	}
+
 	bbf_cleanup(&bbf_ctx);
 
 	return res;
