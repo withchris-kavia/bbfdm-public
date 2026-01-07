@@ -61,16 +61,19 @@ int bbf_config_call(struct ubus_context *ctx, const char *object, const char *me
 
 void reload_specified_services(struct ubus_context *ctx, int idx, struct blob_attr *services,
 		bool is_commit, bool reload, struct list_head *action_list,
-		struct list_head *handler_list, struct list_head *changed_uci);
+		struct list_head *handler_list, struct list_head *changed_uci,
+		struct list_head *commit_action_list, struct list_head *commit_handler_list);
 
 void reload_all_services(struct ubus_context *ctx, int idx, bool is_commit,
 		bool reload, struct list_head *action_list,
-		struct list_head *handler_list, struct list_head *changed_uci);
+		struct list_head *handler_list, struct list_head *changed_uci,
+		struct list_head *commit_action_list, struct list_head *commit_handler_list);
 
 void exec_apply_handler_script(const char *cmd);
 
 void uci_apply_changes_dmmap(int idx, bool is_commit, struct list_head *action_list,
-			struct list_head *handler_list);
+			struct list_head *handler_list,
+			struct list_head *commit_action_list, struct list_head *commit_handler_list);
 
 unsigned char get_idx_by_proto(const char *proto);
 const char *get_proto_conf_savedir_by_idx(int idx);

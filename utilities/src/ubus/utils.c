@@ -251,7 +251,8 @@ int bbf_config_call(struct ubus_context *ctx, const char *object, const char *me
 
 void reload_specified_services(struct ubus_context *ctx, int idx, struct blob_attr *services,
 				bool is_commit, bool reload, struct list_head *action_list,
-				struct list_head *handler_list, struct list_head *changed_uci)
+				struct list_head *handler_list, struct list_head *changed_uci,
+				struct list_head *commit_action_list, struct list_head *commit_handler_list)
 {
 	struct uci_context *uci_ctx = NULL;
 	struct blob_attr *service = NULL;
@@ -324,6 +325,10 @@ void reload_specified_services(struct ubus_context *ctx, int idx, struct blob_at
 			}
 		}
 
+		if (is_commit && commit_action_list && commit_handler_list) {
+			add_external_action_list(commit_action_list, commit_handler_list, file_path, false);
+		}
+
 		if (is_commit == false) { // If revert operation
 			add_external_action_list(action_list, handler_list, file_path, false);
 		} else { // If commit operation
@@ -344,7 +349,8 @@ void reload_specified_services(struct ubus_context *ctx, int idx, struct blob_at
 
 void reload_all_services(struct ubus_context *ctx, int idx, bool is_commit,
 			bool reload, struct list_head *action_list,
-			struct list_head *handler_list, struct list_head *changed_uci)
+			struct list_head *handler_list, struct list_head *changed_uci,
+			struct list_head *commit_action_list, struct list_head *commit_handler_list)
 {
 	struct uci_context *uci_ctx = NULL;
 	char **configs = NULL, **p = NULL;
@@ -402,6 +408,10 @@ void reload_all_services(struct ubus_context *ctx, int idx, bool is_commit,
 			add_external_action_list(action_list, handler_list, file_path, false);
 		}
 
+		if (is_commit && commit_action_list && commit_handler_list) {
+			add_external_action_list(commit_action_list, commit_handler_list, file_path, false);
+		}
+
 		if (is_commit && reload) {
 			add_external_action_list(action_list, handler_list, file_path, true);
 		}
@@ -421,7 +431,8 @@ void exec_apply_handler_script(const char *cmd)
 	}
 }
 
-void uci_apply_changes_dmmap(int idx, bool is_commit, struct list_head *action_list, struct list_head *ext_handler)
+void uci_apply_changes_dmmap(int idx, bool is_commit, struct list_head *action_list, struct list_head *ext_handler,
+			struct list_head *commit_action_list, struct list_head *commit_handler_list)
 {
 	struct uci_context *uci_ctx = NULL;
 	char **configs = NULL, **p = NULL;
@@ -464,6 +475,10 @@ void uci_apply_changes_dmmap(int idx, bool is_commit, struct list_head *action_l
 			if (uci_commit(uci_ctx, &ptr.p, false) != UCI_OK) {
 				ULOG_ERR("Failed to commit changes for config '%s'", *p);
 				continue;
+			}
+
+			if (commit_action_list && commit_handler_list) {
+				add_external_action_list(commit_action_list, commit_handler_list, file_path, false);
 			}
 
 			add_external_action_list(action_list, ext_handler, file_path, true);

@@ -63,6 +63,7 @@ struct bbf_config_async_req {
 };
 
 static struct blob_buf g_critical_bb;
+static struct list_head g_commit_handlers;
 static struct list_head g_apply_handlers;
 static struct list_head g_revert_handlers;
 
@@ -657,10 +658,12 @@ static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_objec
 	struct blob_attr *tb[__MAX];
 	bool monitor = false, reload = true;
 	unsigned char idx = 0;
+	struct list_head commit_action_list;
 	struct list_head action_list;
 	struct list_head *changed_uci;
 
 	ULOG_INFO("Commit handler called");
+	INIT_LIST_HEAD(&commit_action_list);
 	INIT_LIST_HEAD(&action_list);
 
 	if (blobmsg_parse(bbf_config_policy, __MAX, tb, blob_data(msg), blob_len(msg))) {
@@ -725,15 +728,42 @@ static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_objec
 
 		ULOG_INFO("Committing changes for specified services and reloading");
 		reload_specified_services(ctx, idx, async_req->services, true, reload, &action_list,
-					  &g_apply_handlers, changed_uci);
+					  &g_apply_handlers, changed_uci, &commit_action_list, &g_commit_handlers);
 	} else {
 		ULOG_INFO("Applying changes to dmmap UCI config");
-		uci_apply_changes_dmmap(idx, true, &action_list, &g_apply_handlers);
+		uci_apply_changes_dmmap(idx, true, &action_list, &g_apply_handlers, &commit_action_list, &g_commit_handlers);
 		ULOG_INFO("Committing changes for all services and reloading");
-		reload_all_services(ctx, idx, true, reload, &action_list, &g_apply_handlers, changed_uci);
+		reload_all_services(ctx, idx, true, reload, &action_list, &g_apply_handlers, changed_uci,
+				    &commit_action_list, &g_commit_handlers);
 	}
 
 	struct action_node *node = NULL, *tmp = NULL;
+
+	list_for_each_entry_safe(node, tmp, &commit_action_list, list) {
+		char cmd[4096] = {0};
+		unsigned pos = 0;
+
+		ULOG_INFO("Calling external commit handlers");
+
+		if (!file_exists(node->action)) {
+			list_del(&node->list);
+			FREE(node);
+			continue;
+		}
+
+		pos += snprintf(cmd, sizeof(cmd), "sh %s", node->action);
+
+		for (int i = 0; i < node->idx; i++) {
+			pos += snprintf(&cmd[pos], sizeof(cmd) - pos, " %s", node->arg[i]);
+		}
+
+		exec_apply_handler_script(cmd);
+		list_del(&node->list);
+		FREE(node);
+	}
+
+	node = NULL;
+	tmp = NULL;
 	list_for_each_entry_safe(node, tmp, &action_list, list) {
 		char cmd[4096] = {0};
 		unsigned pos = 0;
@@ -811,12 +841,13 @@ static int bbf_config_revert_handler(struct ubus_context *ctx, struct ubus_objec
 
 	if (arr_len) {
 		ULOG_INFO("Reverting specified services");
-		reload_specified_services(ctx, idx, services, false, false, &action_list, &g_revert_handlers, NULL);
+		reload_specified_services(ctx, idx, services, false, false, &action_list, &g_revert_handlers, NULL,
+					  NULL, NULL);
 	} else {
 		ULOG_INFO("Reverting changes to dmmap UCI config");
-		uci_apply_changes_dmmap(idx, false, &action_list, &g_revert_handlers); // revert dmmap changes
+		uci_apply_changes_dmmap(idx, false, &action_list, &g_revert_handlers, NULL, NULL); // revert dmmap changes
 		ULOG_INFO("Reverting all services");
-		reload_all_services(ctx, idx, false, false, &action_list, &g_revert_handlers, NULL);
+		reload_all_services(ctx, idx, false, false, &action_list, &g_revert_handlers, NULL, NULL, NULL);
 	}
 
 	struct action_node *node = NULL, *tmp = NULL;
@@ -958,6 +989,15 @@ static void free_apply_revert_handlers()
 {
 	struct applier_node *node = NULL, *tmp = NULL;
 
+	list_for_each_entry_safe(node, tmp, &g_commit_handlers, list) {
+		list_del(&node->list);
+		FREE(node->file_path);
+		FREE(node->action);
+		FREE(node);
+	}
+
+	node = NULL;
+	tmp = NULL;
 	list_for_each_entry_safe(node, tmp, &g_apply_handlers, list) {
 		list_del(&node->list);
 		FREE(node->file_path);
@@ -995,11 +1035,11 @@ static void __load_handlers(const char *file)
 	}
 
 	char type[2][8] = { "dmmap", "uci" };
-	char method[2][15] = { "apply_handler", "revert_handler" };
-	struct list_head *handler_list[2] = { &g_apply_handlers, &g_revert_handlers };
+	char method[3][15] = { "commit_handler", "apply_handler", "revert_handler" };
+	struct list_head *handler_list[3] = { &g_commit_handlers, &g_apply_handlers, &g_revert_handlers };
 
-	// Load apply/revert handlers
-	for (int x = 0; x < 2; x++) {
+	// Load commit/apply/revert handlers
+	for (int x = 0; x < 3; x++) {
 		json_object *m_handler = NULL;
 		json_object_object_get_ex(daemon_config, method[x], &m_handler);
 		if (!m_handler) {
@@ -1081,6 +1121,7 @@ static void load_apply_revert_handlers()
 {
 	struct dirent **namelist;
 
+	INIT_LIST_HEAD(&g_commit_handlers);
 	INIT_LIST_HEAD(&g_apply_handlers);
 	INIT_LIST_HEAD(&g_revert_handlers);
 
