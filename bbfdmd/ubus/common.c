@@ -109,6 +109,21 @@ struct blob_attr *get_results_array(struct blob_attr *msg)
 	return tb[0];
 }
 
+struct blob_attr *get_modified_uci_array(struct blob_attr *msg)
+{
+	struct blob_attr *tb[1] = {0};
+	const struct blobmsg_policy p[1] = {
+			{ "modified_uci", BLOBMSG_TYPE_ARRAY }
+	};
+
+	if (msg == NULL)
+		return NULL;
+
+	blobmsg_parse(p, 1, tb, blobmsg_data(msg), blobmsg_len(msg));
+
+	return tb[0];
+}
+
 bool str_match(const char *string, const char *pattern, size_t nmatch, regmatch_t pmatch[])
 {
 	regex_t re;

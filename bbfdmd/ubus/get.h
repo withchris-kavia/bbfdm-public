@@ -20,6 +20,7 @@ enum {
 };
 
 struct async_request_context {
+	struct list_head uci_modified;
 	struct ubus_context *ubus_ctx;
 	struct ubus_request_data request_data;
 	struct blob_buf tmp_bb;
@@ -38,6 +39,11 @@ struct ubus_request_tracker {
 	struct ubus_request async_request;
 	struct uloop_timeout timeout;
 	char request_name[128];
+};
+
+struct list_uci_modified {
+	struct list_head list;
+	char file_path[2048];
 };
 
 void run_async_call(struct async_request_context *ctx, service_entry_t *service, struct blob_attr *msg);
