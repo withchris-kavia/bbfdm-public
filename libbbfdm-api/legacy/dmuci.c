@@ -468,13 +468,13 @@ lookup:
 /**** UCI GET by section pointer*****/
 int dmuci_get_value_by_section_string(struct uci_section *s, const char *option, char **value)
 {
-	struct uci_element *e = NULL;
+	struct uci_element *e = NULL, *tmp;
 	struct uci_option *o;
 
-	if (s == NULL || option == NULL)
+	if (s == NULL || option == NULL || s->type == NULL)
 		goto not_found;
 
-	uci_foreach_element(&s->options, e) {
+	uci_foreach_element_safe(&s->options, tmp, e) {
 		o = (uci_to_option(e));
 		if (!DM_STRCMP(o->e.name, option)) {
 			if (o->type == UCI_TYPE_LIST) {
