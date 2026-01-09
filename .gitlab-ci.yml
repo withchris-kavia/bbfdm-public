@@ -24,9 +24,9 @@ include:
        - if: $CI_COMMIT_BRANCH == "devel"
 
 stages:
+    - functional_test
     - unit_test
     - static_code_analysis
-    - functional_test
     - deploy
 
 run_unit_test:

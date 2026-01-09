@@ -151,6 +151,7 @@
       "repo": "https://dev.iopsys.eu/network/netmngr.git",
       "proto": "git",
       "service_name": "netmngr",
+      "version": "sync_inst",
       "compile": [
         "apt install iproute2 -y",
         "make -C src clean",
