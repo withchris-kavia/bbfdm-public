@@ -65,6 +65,7 @@ struct bbf_config_async_req {
 static struct blob_buf g_critical_bb;
 static struct list_head g_apply_handlers;
 static struct list_head g_revert_handlers;
+static struct list_head g_pre_apply_handlers;
 
 #ifdef BBF_CONFIG_DEBUG
 static void log_instance(struct instance *inst)
@@ -650,6 +651,190 @@ static bool get_monitor_status(int proto_idx, struct blob_attr *services_ba)
 	return monitor;
 }
 
+static bool service_list_contains_config(struct blob_attr *services, const char *config)
+{
+	struct blob_attr *service = NULL;
+	size_t rem = 0;
+
+	if (services == NULL || config == NULL || config[0] == '\0') {
+		return false;
+	}
+
+	blobmsg_for_each_attr(service, services, rem) {
+		const char *svc;
+		const char *svc_base;
+
+		if (blobmsg_type(service) != BLOBMSG_TYPE_STRING) {
+			continue;
+		}
+
+		svc = blobmsg_get_string(service);
+		if (svc == NULL || svc[0] == '\0') {
+			continue;
+		}
+
+		// Ignore dmmap entries (we only want to match against UCI elements)
+		if (strncmp(svc, DMMAP_CONFDIR, strlen(DMMAP_CONFDIR)) == 0) {
+			continue;
+		}
+
+		svc_base = strrchr(svc, '/');
+		svc_base = (svc_base != NULL) ? (svc_base + 1) : svc;
+
+		if (strcmp(svc_base, config) == 0) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void execute_pre_apply_handlers(struct blob_attr *services)
+{
+	struct list_head pre_action_list;
+	struct applier_node *app_node = NULL;
+	struct action_node *act_node = NULL, *tmp = NULL;
+	bool services_specified;
+	bool uci_element_specified = false;
+
+	services_specified = (services != NULL) && (blobmsg_len(services) > 0);
+	if (services_specified) {
+		struct blob_attr *service = NULL;
+		size_t rem = 0;
+
+		blobmsg_for_each_attr(service, services, rem) {
+			const char *svc;
+
+			if (blobmsg_type(service) != BLOBMSG_TYPE_STRING) {
+				continue;
+			}
+
+			svc = blobmsg_get_string(service);
+			if (svc == NULL || svc[0] == '\0') {
+				continue;
+			}
+
+			// Ignore dmmap entries (we only want to match against UCI elements)
+			if (strncmp(svc, DMMAP_CONFDIR, strlen(DMMAP_CONFDIR)) == 0) {
+				continue;
+			}
+
+			uci_element_specified = true;
+			break;
+		}
+	}
+	INIT_LIST_HEAD(&pre_action_list);
+
+	list_for_each_entry(app_node, &g_pre_apply_handlers, list) {
+		const char *config;
+		bool trigger;
+
+		if (app_node->action == NULL) {
+			continue;
+		}
+
+		// If services are specified but none are UCI elements (e.g. only dmmap entries),
+		// still call the pre apply handler once (per action)
+		if (services_specified && (uci_element_specified == false)) {
+			bool node_exist = false;
+			list_for_each_entry(act_node, &pre_action_list, list) {
+				if (strcmp(act_node->action, app_node->action) == 0) {
+					node_exist = true;
+					break;
+				}
+			}
+
+			if (node_exist == false) {
+				act_node = (struct action_node *)calloc(1, sizeof(struct action_node));
+				if (act_node == NULL) {
+					ULOG_INFO("Failed to allocate memory for pre apply action list");
+					continue;
+				}
+
+				snprintf(act_node->action, sizeof(act_node->action), "%s", app_node->action);
+				INIT_LIST_HEAD(&act_node->list);
+				list_add_tail(&act_node->list, &pre_action_list);
+			}
+
+			continue;
+		}
+
+		if (app_node->file_path == NULL) {
+			continue;
+		}
+
+		config = strrchr(app_node->file_path, '/');
+		config = (config != NULL) ? (config + 1) : app_node->file_path;
+		if (config == NULL || config[0] == '\0') {
+			continue;
+		}
+
+		// Trigger if no service is specified, or if any configured UCI file is included in the services list
+		trigger = (!services_specified) ? true : service_list_contains_config(services, config);
+		if (trigger == false) {
+			continue;
+		}
+
+		// Group by action, and pass all matched configs as args (handler must be called only once)
+		bool node_exist = false;
+		list_for_each_entry(act_node, &pre_action_list, list) {
+			if (strcmp(act_node->action, app_node->action) == 0) {
+				node_exist = true;
+				break;
+			}
+		}
+
+		if (node_exist == false) {
+			act_node = (struct action_node *)calloc(1, sizeof(struct action_node));
+			if (act_node == NULL) {
+				ULOG_INFO("Failed to allocate memory for pre apply action list");
+				continue;
+			}
+
+			snprintf(act_node->action, sizeof(act_node->action), "%s", app_node->action);
+			INIT_LIST_HEAD(&act_node->list);
+			list_add_tail(&act_node->list, &pre_action_list);
+		}
+
+		// Add arg if not already present
+		bool arg_exist = false;
+		for (int i = 0; i < act_node->idx; i++) {
+			if (strcmp(act_node->arg[i], config) == 0) {
+				arg_exist = true;
+				break;
+			}
+		}
+
+		if (arg_exist == false && act_node->idx < ARG_COUNT) {
+			snprintf(act_node->arg[act_node->idx], ARG_LEN, "%s", config);
+			act_node->idx++;
+		}
+	}
+
+	// Execute all pre apply handlers once (per action)
+	list_for_each_entry_safe(act_node, tmp, &pre_action_list, list) {
+		char cmd[4096] = {0};
+		unsigned pos = 0;
+
+		if (!file_exists(act_node->action)) {
+			list_del(&act_node->list);
+			FREE(act_node);
+			continue;
+		}
+
+		pos += snprintf(cmd, sizeof(cmd), "sh %s", act_node->action);
+		for (int i = 0; i < act_node->idx; i++) {
+			pos += snprintf(&cmd[pos], sizeof(cmd) - pos, " %s", act_node->arg[i]);
+		}
+
+		ULOG_INFO("Calling pre apply handler");
+		exec_apply_handler_script(cmd);
+
+		list_del(&act_node->list);
+		FREE(act_node);
+	}
+}
+
 static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_object *obj __attribute__((unused)),
 		    struct ubus_request_data *req, const char *method __attribute__((unused)),
 		    struct blob_attr *msg)
@@ -704,9 +889,13 @@ static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_objec
 #endif
 	}
 
+
 	struct blob_attr *services = tb[SERVICES_NAME];
 
 	size_t arr_len = (services) ? blobmsg_len(services) : 0;
+
+	// Execute pre apply handlers once (before apply handlers), based on requested services
+	execute_pre_apply_handlers(services);
 
 	if (arr_len) {
 		size_t blob_data_len = blob_raw_len(services);
@@ -973,6 +1162,15 @@ static void free_apply_revert_handlers()
 		FREE(node->action);
 		FREE(node);
 	}
+
+	node = NULL;
+	tmp = NULL;
+	list_for_each_entry_safe(node, tmp, &g_pre_apply_handlers, list) {
+		list_del(&node->list);
+		FREE(node->file_path);
+		FREE(node->action);
+		FREE(node);
+	}
 }
 
 static void __load_handlers(const char *file)
@@ -994,19 +1192,19 @@ static void __load_handlers(const char *file)
 		return;
 	}
 
-	char type[2][8] = { "dmmap", "uci" };
-	char method[2][15] = { "apply_handler", "revert_handler" };
-	struct list_head *handler_list[2] = { &g_apply_handlers, &g_revert_handlers };
+	const char *type[] = { "dmmap", "uci" };
+	const char *method[] = { "apply_handler", "revert_handler", "pre_apply_handler" };
+	struct list_head *handler_list[] = { &g_apply_handlers, &g_revert_handlers, &g_pre_apply_handlers };
 
 	// Load apply/revert handlers
-	for (int x = 0; x < 2; x++) {
+	for (int x = 0; x < ARRAY_SIZE(method); x++) {
 		json_object *m_handler = NULL;
 		json_object_object_get_ex(daemon_config, method[x], &m_handler);
 		if (!m_handler) {
 			continue;
 		}
 
-		for (int i = 0; i < 2; i++) {
+		for (int i = 0; i < ARRAY_SIZE(type); i++) {
 			json_object *array = NULL;
 
 			if (!json_object_object_get_ex(m_handler, type[i], &array) ||
@@ -1083,6 +1281,7 @@ static void load_apply_revert_handlers()
 
 	INIT_LIST_HEAD(&g_apply_handlers);
 	INIT_LIST_HEAD(&g_revert_handlers);
+	INIT_LIST_HEAD(&g_pre_apply_handlers);
 
 	int num_files = scandir(BBFDM_MICROSERVICE_INPUT_PATH, &namelist, filter, compare);
 

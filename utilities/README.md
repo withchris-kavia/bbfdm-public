@@ -195,6 +195,33 @@ The daemon supports multiple protocols with dedicated configuration directories:
 - If external component asks to commit UCI file 'xxxx' or 'yyyy' or both then this module will commit the changes from protocol based UCI save directory to the standard UCI and will execute the script provided in the `external_handler` field. If no external handler is provided then it will execute default reload handler script `/etc/bbfdm/bbf_default_reload.sh`.
 - If there is any change in the dmmap file `zzzz` and a commit request has been received then this module will commit the changes in standard dmmap file from the protocol based dmmap directory and if any external handler is given like in above example then it will execute that script. Services may use this handler script to perform any desired tasks on changes in the dmmap file.
 
+##### Pre Apply Handler
+
+`pre_apply_handler` uses the same structure as `apply_handler` and is executed **before** the apply handlers during `commit`.
+
+- If **no services** are specified in the commit request, the pre-apply handler is executed.
+- If services are specified, the pre-apply handler is executed when **any** configured UCI file matches the requested services.
+- The pre-apply handler is executed **only once per commit** (grouped by `external_handler`), with matched UCI file names passed as script arguments.
+
+Example:
+
+```json
+{
+  "daemon": {
+    "pre_apply_handler": {
+      "uci": [
+        {
+          "file": [
+            "network",
+          ],
+          "external_handler": "/etc/dm-framework/dmf_apply_handler.sh.sh"
+        }
+      ]
+    }
+  }
+}
+```
+
 ### Operational Flow
 
 #### Commit Operation
@@ -338,7 +365,7 @@ flowchart TD
 
 ##### Example
 ```bash
-cat /etc/bbfdm/critical_services.json 
+cat /etc/bbfdm/critical_services.json
 {
         "usp": [
                         "/etc/config/mapcontroller",
