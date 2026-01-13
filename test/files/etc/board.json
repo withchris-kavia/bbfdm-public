@@ -1,0 +1,19 @@
+{
+	"model": {
+		"id": "genexis,e650-r0",
+		"name": "Test-env"
+	},
+	"network": {
+		"lan": {
+		},
+		"wan": {
+			"device": "eth0",
+			"protocol": "static"
+		}
+	},
+	"system": {
+		"label_macaddr": "aa:bb:cc:00:00:00",
+		"hostname": "Test-Env",
+		"timezone": "CET-1CEST,M3.5.0,M10.5.0/3"
+	}
+}
