@@ -938,10 +938,10 @@ int get_shift_utc_time(int shift_time, char *utc_time, int size)
 int get_shift_time_time(int shift_time, char *local_time, int size)
 {
 	time_t t_time;
-	struct tm *t_tm;
+	struct tm *t_tm, tm_local;
 
 	t_time = time(NULL) + shift_time;
-	t_tm = localtime(&t_time);
+	t_tm = localtime_r(&t_time, &tm_local);
 	if (t_tm == NULL)
 		return -1;
 
@@ -1067,11 +1067,11 @@ int dm_time_utc_format(time_t ts, char **dst)
 int dm_time_format(time_t ts, char **dst)
 {
 	char time_buf[32] = { 0, 0 };
-	struct tm *t_tm;
+	struct tm *t_tm, tm_local;
 
 	*dst = dmstrdup("0001-01-01T00:00:00+00:00");
 
-	t_tm = localtime(&ts);
+	t_tm = localtime_r(&ts, &tm_local);
 	if (t_tm == NULL)
 		return -1;
 

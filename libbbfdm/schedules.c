@@ -40,7 +40,7 @@ static int dayname_to_week_day(const char *day)
 
 static char *get_status(char *start, char *period, char *day)
 {
-	struct tm *info = NULL;
+	struct tm *info = NULL, tm_local;
 	unsigned int s_day, s_hr, s_min, s_sec, e_day, e_hr, e_min, e_sec;
 	time_t ctime;
 	size_t length, i;
@@ -51,7 +51,7 @@ static char *get_status(char *start, char *period, char *day)
 		return "Error";
 
 	time(&ctime);
-	info = localtime(&ctime);
+	info = localtime_r(&ctime, &tm_local);
 	if (!info)
 		return "Error";
 
