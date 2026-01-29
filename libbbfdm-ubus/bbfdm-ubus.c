@@ -313,8 +313,6 @@ static int bbfdm_instances_handler(struct ubus_context *ctx, struct ubus_object 
 
 	fill_optional_data(&data, tb[DM_INSTANCES_OPTIONAL]);
 
-	bbfdm_refresh_references(data.bbf_ctx.dm_type, obj->name);
-
 	bbfdm_get(&data, BBF_INSTANCES);
 
 	free_path_list(&paths_list);

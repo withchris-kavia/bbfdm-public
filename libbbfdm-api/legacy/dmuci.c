@@ -795,10 +795,13 @@ static int __uci_perform_op(int operation, bbfdm_uci_op_data *op_data)
 		return -1;
 	}
 
-	if (uci_save(op_data->ucictx, ptr.p) != UCI_OK)
-		return -1;
+	if (ptr.p && !uci_list_empty(&ptr.p->delta)) {
+		if (uci_save(op_data->ucictx, ptr.p) != UCI_OK)
+			return -1;
 
-	add_list_modified_uci(op_data->dmctx, op_data->ucictx->confdir, op_data->package);
+		add_list_modified_uci(op_data->dmctx, op_data->ucictx->confdir, op_data->package);
+	}
+
 	return 0;
 }
 
