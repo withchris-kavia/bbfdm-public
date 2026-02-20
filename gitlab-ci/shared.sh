@@ -126,10 +126,12 @@ function install_wifimngr_as_micro_service()
 	[ -d "${BBFDM_PLUGIN_DEST}/wifimngr" ] && return 0
 
 	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/hal/wifimngr.git ${BBFDM_PLUGIN_DEST}/wifimngr
-	cd wifimngr
-	exec_cmd cmake . -DHAS_UBUS=ON -DWIFIMNGR_BUILD_TR181_PLUGIN=ON
-	exec_cmd make
-	exec_cmd make install
+	(
+		cd ${BBFDM_PLUGIN_DEST}/wifimngr
+		exec_cmd cmake . -DHAS_UBUS=ON -DWIFIMNGR_BUILD_TR181_PLUGIN=ON
+		exec_cmd make
+		exec_cmd make install
+	)
 }
 
 function install_hal_libs()
