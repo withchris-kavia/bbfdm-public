@@ -18,7 +18,7 @@ rm -rf "${BBFDM_MS_DIR:?}"/*
 rm -f "${BBFDM_MS_CONF}"/*
 rm -f "${BBFDM_DMMAP_DIR}"/*
 
-install_libeasy
+install_hal_libs
 # compile and install Core Data Model as a micro-service
 install_libbbf "${1}"
 
@@ -64,12 +64,6 @@ for i in $(seq 0 $((plugin_count - 1))); do
 	echo "Plugin name: $plugin_name"
 	echo "Destination: $dest"
 	echo "Version: $version"
-
-	# Install dependencies
-	if [ "$plugin_name" == "ethmngr" ]; then
-		install_libethernet
-		install_libqos
-	fi
 
 	if [ "$plugin_name" == "parental-control" ]; then
 		install_cmph

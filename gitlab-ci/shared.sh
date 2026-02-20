@@ -121,66 +121,73 @@ function install_libbbf_test()
 	install_ms_plugin ./test/bbf_test/libbbf_test.so core
 }
 
-function install_wifidmd_as_micro_service()
+function install_wifimngr_as_micro_service()
 {
-	[ -d "${BBFDM_PLUGIN_DEST}/wifidmd" ] && return 0
+	[ -d "${BBFDM_PLUGIN_DEST}/wifimngr" ] && return 0
 
-	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/bbf/wifidmd.git ${BBFDM_PLUGIN_DEST}/wifidmd
-
-	exec_cmd make -C ${BBFDM_PLUGIN_DEST}/wifidmd/src/ clean && make -C ${BBFDM_PLUGIN_DEST}/wifidmd/src/ WIFIDMD_ENABLE_WIFI_DATAELEMENTS='y'
-	exec_cmd cp -f ${BBFDM_PLUGIN_DEST}/wifidmd/src/wifidmd /usr/sbin/
+	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/hal/wifimngr.git ${BBFDM_PLUGIN_DEST}/wifimngr
+	cd wifimngr
+	exec_cmd cmake . -DHAS_UBUS=ON -DWIFIMNGR_BUILD_TR181_PLUGIN=ON
+	exec_cmd make
+	exec_cmd make install
 }
 
-function install_libeasy()
+function install_hal_libs()
 {
-	[ -d "${BBFDM_PLUGIN_DEST}/libeasy" ] && return 0
+	if [ ! -d "${BBFDM_PLUGIN_DEST}/libeasy" ]; then
+		exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/iopsys/libeasy.git ${BBFDM_PLUGIN_DEST}/libeasy
+		(
 
-	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/iopsys/libeasy.git ${BBFDM_PLUGIN_DEST}/libeasy
-	(
+			cd ${BBFDM_PLUGIN_DEST}/libeasy
+			exec_cmd cmake -DCMAKE_INSTALL_PREFIX=/usr .
+			exec_cmd make
+			exec_cmd make install
+		)
+	fi
+	if [ ! -d "${BBFDM_PLUGIN_DEST}/libwifi" ]; then
+		exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/hal/libwifi.git ${BBFDM_PLUGIN_DEST}/libwifi
+		(
 
-		cd ${BBFDM_PLUGIN_DEST}/libeasy
-		exec_cmd cmake -DCMAKE_INSTALL_PREFIX=/usr .
-		exec_cmd make
-		exec_cmd make install
-	)
-}
+			cd ${BBFDM_PLUGIN_DEST}/libwifi
+			cd libwifiutils
+			exec_cmd cmake .
+			exec_cmd make
+			exec_cmd make install
+			cd -
+			cd libwifi
+			exec_cmd cmake . -DHAS_WIFI=ON
+			exec_cmd make
+			exec_cmd make install
+			cd -
+		)
+	fi
+	if [ ! -d "${BBFDM_PLUGIN_DEST}/libethernet" ]; then
+		exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/iopsys/libethernet.git ${BBFDM_PLUGIN_DEST}/libethernet
+		(
+			 cd ${BBFDM_PLUGIN_DEST}/libethernet
+			 make PLATFORM=TEST
+			 sudo cp ethernet.h /usr/include
+			 sudo cp -a libethernet*.so* /usr/lib
+			 sudo ldconfig
+		)
+	fi
 
-function install_libqos()
-{
-	[ -d "${BBFDM_PLUGIN_DEST}/libqos" ] && return 0
+	if [ ! -d "${BBFDM_PLUGIN_DEST}/libqos" ]; then
+		exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/hal/libqos.git ${BBFDM_PLUGIN_DEST}/libqos
+		(
 
-	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/hal/libqos.git ${BBFDM_PLUGIN_DEST}/libqos
-	(
-
-		cd ${BBFDM_PLUGIN_DEST}/libqos
-		exec_cmd make
-		sudo mkdir -p /usr/include/
-		sudo cp -a libqos*.so* /usr/lib/
-		sudo cp -a include/*.h /usr/include/
-	)
-}
-
-function install_libethernet()
-{
-	[ -d "${BBFDM_PLUGIN_DEST}/libethernet" ] && return 0
-
-	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/iopsys/libethernet.git ${BBFDM_PLUGIN_DEST}/libethernet
-	(
-		 cd ${BBFDM_PLUGIN_DEST}/libethernet
-		 make PLATFORM=TEST
-		 sudo cp ethernet.h /usr/include
-		 sudo cp -a libethernet*.so* /usr/lib
-		 sudo ldconfig
-	)
+			cd ${BBFDM_PLUGIN_DEST}/libqos
+			exec_cmd make
+			sudo mkdir -p /usr/include/
+			sudo cp -a libqos*.so* /usr/lib/
+			sudo cp -a include/*.h /usr/include/
+		)
+	fi
 }
 
 function install_ethmngr_as_micro_service()
 {
 	[ -d "${BBFDM_PLUGIN_DEST}/ethmngr" ] && return 0
-
-	install_libeasy
-	install_libethernet
-	install_libqos
 
 	exec_cmd git clone -b ${BRANCH:-devel} --depth=1 https://dev.iopsys.eu/hal/ethmngr.git ${BBFDM_PLUGIN_DEST}/ethmngr
 	exec_cmd make -C ${BBFDM_PLUGIN_DEST}/ethmngr

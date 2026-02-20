@@ -98,19 +98,19 @@
       ]
     },
     {
-      "repo": "https://dev.iopsys.eu/bbf/wifidmd.git",
+      "repo": "https://dev.iopsys.eu/hal/wifimngr.git",
       "proto": "git",
-      "service_name": "wifidmd",
+      "service_name": "wifimngr",
       "unified_daemon": true,
-      "daemon_name": "/usr/sbin/wifidmd",
-      "dm_info_file": "src/datamodel_description.json",
+      "daemon_name": "/usr/sbin/wifimngr",
+      "schema_option": "p",
       "compile": [
-        "make -C src clean",
-        "make -C src CFLAGS+='-DBBF_VENDOR_PREFIX=\\\"X_IOWRT_EU_\\\"' WIFIDMD_ENABLE_WIFI_DATAELEMENTS='y'"
+        "cmake . -DHAS_UBUS=ON -DWIFIMNGR_BUILD_TR181_PLUGIN=ON",
+        "make",
+	"make install"
       ],
       "post_install": [
-        "cp -f src/wifidmd /usr/sbin/",
-        "cp -f /opt/dev/iopsys/wifidmd/bbfdm_service.json /etc/bbfdm/services/wifidmd.json"
+        "cp -f /opt/dev/iopsys/wifimngr/bbfdm_service.json /etc/bbfdm/services/wifimngr.json"
       ]
     },
     {
@@ -645,8 +645,8 @@
       "proto": "git",
       "dm_info_file": "genexis-packages/easywifi/files/wifi_extn.json",
       "post_install": [
-        "mkdir -p /usr/share/bbfdm/micro_services/wifidmd",
-        "sed 's/{BBF_VENDOR_PREFIX}/X_GENEXIS_EU_/g' genexis-packages/easywifi/files/wifi_extn.json > /usr/share/bbfdm/micro_services/wifidmd/wifi_extn.json"
+        "mkdir -p /usr/share/bbfdm/micro_services/wifimngr",
+        "sed 's/{BBF_VENDOR_PREFIX}/X_GENEXIS_EU_/g' genexis-packages/easywifi/files/wifi_extn.json > /usr/share/bbfdm/micro_services/wifimngr/wifi_extn.json"
       ]
     },
     {

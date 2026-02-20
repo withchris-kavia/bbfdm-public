@@ -9,6 +9,7 @@ cp ./gitlab-ci/bbfdm_services.conf /etc/supervisor/conf.d/
 
 supervisorctl reread
 supervisorctl update
+supervisorctl restart all
 exec_cmd ubus wait_for bbfdm
 sleep 20
 

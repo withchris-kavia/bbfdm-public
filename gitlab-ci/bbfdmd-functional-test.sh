@@ -10,6 +10,7 @@ cp ./gitlab-ci/bbfdm_services.conf /etc/supervisor/conf.d/
 
 supervisorctl reread
 supervisorctl update
+supervisorctl restart all
 sleep 10
 
 supervisorctl status all

@@ -18,7 +18,7 @@ rm -rf ${BBFDM_MS_DIR}/*
 rm -f ${BBFDM_MS_CONF}/*
 rm -f ${BBFDM_DMMAP_DIR}/*
 
-install_libeasy
+install_hal_libs
 # compile and install Core Data Model as a micro-service
 install_libbbf ${1}
 
@@ -34,8 +34,8 @@ else
 	install_sysmngr_as_micro_service
 
 	#install WiFi Data Model as a micro-service
-	echo "Installing WiFi Data Model (wifidmd) as a micro-service"
-	install_wifidmd_as_micro_service
+	echo "Installing WiFi Manager (wifimngr) as a micro-service"
+	install_wifimngr_as_micro_service
 
 	#install Network Data Model as a micro-service
 	echo "Installing Network Data Model (netmngr) as a micro-service"

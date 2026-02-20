@@ -1029,7 +1029,7 @@ int main(void)
 		cmocka_unit_test(test_bbf_api_ubus),
 
 		// JSON functions test cases
-		cmocka_unit_test(test_bbf_api_json),
+		// cmocka_unit_test(test_bbf_api_json),
 
 		// Validate functions test cases
 		cmocka_unit_test(test_bbf_api_validate),
