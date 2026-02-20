@@ -54,13 +54,13 @@ static int teardown_revert(void **state)
 
 static int group_init(void **state)
 {
-	bbf_global_init(TR181_ROOT_TREE, "/usr/share/bbfdm/micro_services/core");
+	bbf_global_init(TR181_ROOT_TREE, NULL, "/usr/share/bbfdm/micro_services/core");
 	return 0;
 }
 
 static int group_teardown(void **state)
 {
-	bbf_global_clean(TR181_ROOT_TREE);
+	bbf_global_clean(TR181_ROOT_TREE, NULL);
 	return 0;
 }
 

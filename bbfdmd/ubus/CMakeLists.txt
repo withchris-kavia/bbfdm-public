@@ -6,6 +6,10 @@ ADD_DEFINITIONS(-fstrict-aliasing -Wall -Wextra -Werror -Wformat -Wformat-signed
 
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -I${CMAKE_SOURCE_DIR}")
 
+if (BBFDM_DM_SERVICE_RAM_OPTIMIZED)
+	SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DBBFDM_DM_SERVICE_RAM_OPTIMIZED")
+endif()
+
 FILE(GLOB BBF_SOURCES *.c)
 ADD_EXECUTABLE(bbfdmd ${BBF_SOURCES})
 TARGET_LINK_LIBRARIES(bbfdmd ubus ubox blobmsg_json json-c bbfdm-api-v2)

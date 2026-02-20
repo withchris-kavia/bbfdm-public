@@ -21,6 +21,7 @@ static void usage(char *prog)
 	fprintf(stderr, "    -m <ms name>        micro-service name\n");
 	fprintf(stderr, "    -l <loglevel>       log verbosity value as per standard syslog\n");
 	fprintf(stderr, "    -d                  Display the schema data model supported by micro-service\n");
+	fprintf(stderr, "    -s                  Reduce memory usage of dm-services\n");
 	fprintf(stderr, "    -h                  Display this help\n");
 	fprintf(stderr, "\n");
 }
@@ -31,10 +32,11 @@ int main(int argc, char **argv)
 	char proc_name[64] = {0};
 	int log_level = LOG_ERR;
 	int err = 0, ch, dm_type = 0;
+	bool suppress = false;
 
 	memset(&bbfdm_ctx, 0, sizeof(struct bbfdm_context));
 
-	while ((ch = getopt(argc, argv, "hdl:m:")) != -1) {
+	while ((ch = getopt(argc, argv, "hdsl:m:")) != -1) {
 		switch (ch) {
 		case 'm':
 			bbfdm_ubus_set_service_name(&bbfdm_ctx, optarg);
@@ -48,6 +50,9 @@ int main(int argc, char **argv)
 			break;
 		case 'd':
 			dm_type++;
+			break;
+		case 's':
+			suppress = true;
 			break;
 		case 'h':
 			usage(argv[0]);
@@ -63,7 +68,10 @@ int main(int argc, char **argv)
 	}
 
 	if (dm_type > 0) {
-		int res = bbfdm_print_data_model_schema(&bbfdm_ctx, dm_type);
+		int res = 0;
+		if (suppress == false) {
+			res = bbfdm_print_data_model_schema(&bbfdm_ctx, dm_type);
+		}
 		exit(res);
 	}
 	openlog(bbfdm_ctx.config.service_name, LOG_CONS | LOG_PID | LOG_NDELAY, LOG_LOCAL1);
@@ -71,9 +79,15 @@ int main(int argc, char **argv)
 	bbfdm_ubus_set_log_level(log_level);
 	bbfdm_ubus_load_data_model(NULL);
 
-	err = bbfdm_ubus_register_init(&bbfdm_ctx);
-	if (err != 0)
-		goto exit;
+	if (suppress == false) {
+		err = bbfdm_ubus_register_init(&bbfdm_ctx);
+		if (err != 0)
+			goto exit;
+	} else {
+		err = bbfdm_ubus_register_suppress_init(&bbfdm_ctx);
+		if (err != 0)
+			goto exit;
+	}
 
 	// Create process name using service name and prefix "dm_"
 	snprintf(proc_name, sizeof(proc_name), "dm_%s", bbfdm_ctx.config.service_name);

@@ -36,6 +36,7 @@
 // Global variables
 static void *deamon_lib_handle = NULL;
 static uint8_t s_log_level = 0xff;
+struct list_head supp_modules;
 
 static void bbfdm_ctx_init(struct bbfdm_context *bbfdm_ctx)
 {
@@ -46,7 +47,7 @@ static void bbfdm_ctx_init(struct bbfdm_context *bbfdm_ctx)
 
 static void bbfdm_ctx_cleanup(struct bbfdm_context *u)
 {
-	bbf_global_clean(DEAMON_DM_ROOT_OBJ);
+	bbf_global_clean(DEAMON_DM_ROOT_OBJ, u);
 
 	/* DotSo Plugin */
 	bbfdm_free_dotso_plugin(u, &deamon_lib_handle);
@@ -659,19 +660,11 @@ static void free_changed_uci(struct bbfdm_context *bbfdm_ctx)
 	}
 }
 
-static int load_apply_handlers_from_file(bbfdm_config_t *config)
+static int read_apply_handlers_config(const char *serv_config, bbfdm_config_t *config, bool suppress)
 {
-	char serv_config[MAX_DM_PATH] = {0};
-
-	if (config == NULL) {
-		BBF_ERR("bbfdm_config is null");
+	if (DM_STRLEN(serv_config) == 0) {
+		BBF_ERR("No json file name received");
 		return -1;
-	}
-
-	snprintf(serv_config, sizeof(serv_config), "%s/%s.json", BBFDM_SERVICE_CONFIG_PATH, config->service_name);
-	if (!bbfdm_file_exists(serv_config) || !bbfdm_is_regular_file(serv_config)) {
-		BBF_ERR("Config file %s not exists for service %s", serv_config, config->service_name);
-		return 0;
 	}
 
 	json_object *json_root = json_object_from_file(serv_config);
@@ -686,6 +679,56 @@ static int load_apply_handlers_from_file(bbfdm_config_t *config)
 		BBFDM_ERR("Failed to find daemon object");
 		json_object_put(json_root);
 		return -1;
+	}
+
+	if (suppress == true) {
+		json_object *unified_daemon = NULL;
+
+		json_object_object_get_ex(daemon_config, "unified_daemon", &unified_daemon);
+		if (!unified_daemon) {
+			json_object_put(json_root);
+			return 0;
+		}
+
+		bool is_unified = json_object_get_boolean(unified_daemon);
+		if (is_unified == true) {
+			json_object_put(json_root);
+			return 0;
+		} else {
+			char *tmp = strrchr(serv_config, '/');
+			if (tmp == NULL) {
+				BBFDM_ERR("Failed to extract service name for %s", serv_config);
+				json_object_put(json_root);
+				return 0;
+			}
+
+			char *serv = tmp + 1;
+			char serv_name[64] = {0};
+
+			snprintf(serv_name, sizeof(serv_name), "%s", serv);
+
+			int len = strlen(serv_name);
+			tmp = serv_name + len - 5;
+			if (strcmp(tmp, ".json") != 0) {
+				BBFDM_ERR("Service file %s is not ending with .json", serv_config);
+				json_object_put(json_root);
+				return 0;
+			}
+
+			*tmp = '\0';
+
+			// store this service name
+			struct supp_module_node *supp_node = (struct supp_module_node *)calloc(1, sizeof(struct supp_module_node));
+			if (supp_node == NULL) {
+				BBFDM_ERR("Failed to allocate memory for service file %s", serv_config);
+				json_object_put(json_root);
+				return 0;
+			}
+
+			INIT_LIST_HEAD(&supp_node->list);
+			list_add_tail(&supp_node->list, &supp_modules);
+			supp_node->service = strdup(serv_name);
+		}
 	}
 
 	json_object *apply_handler = NULL;
@@ -756,6 +799,60 @@ static int load_apply_handlers_from_file(bbfdm_config_t *config)
 	return 0;
 }
 
+static int load_apply_handlers_from_file(bbfdm_config_t *config, bool suppress)
+{
+	char serv_config[MAX_DM_PATH] = {0};
+
+	if (config == NULL) {
+		BBF_ERR("bbfdm_config is null");
+		return -1;
+	}
+
+	snprintf(serv_config, sizeof(serv_config), "%s/%s.json", BBFDM_SERVICE_CONFIG_PATH, config->service_name);
+	if (!bbfdm_file_exists(serv_config) || !bbfdm_is_regular_file(serv_config)) {
+		BBF_ERR("Config file %s not exists for service %s", serv_config, config->service_name);
+		return -1;
+	}
+
+	if (read_apply_handlers_config(serv_config, config, suppress) != 0) {
+		BBF_ERR("Failed to read apply handlers for service file %s", serv_config);
+		return -1;
+	}
+
+	if (suppress == true) {
+		DIR *dir;
+		struct dirent *entry;
+
+		dir = opendir(BBFDM_SERVICE_CONFIG_PATH);
+		if (!dir) {
+			BBF_ERR("Failed to open service directory %s", BBFDM_SERVICE_CONFIG_PATH);
+			return -1;
+		}
+
+		while ((entry = readdir(dir)) != NULL) {
+			/* Match only regular files ending in .json */
+			char plug_config[MAX_DM_PATH] = {0};
+
+			size_t len = strlen(entry->d_name);
+			if (len < 5 || strcmp(entry->d_name + len - 5, ".json") != 0)
+				continue;
+
+			snprintf(plug_config, sizeof(plug_config), "%s/%s", BBFDM_SERVICE_CONFIG_PATH, entry->d_name);
+			if (!bbfdm_is_regular_file(plug_config) || DM_STRCMP(serv_config, plug_config) == 0)
+				continue;
+
+			if (read_apply_handlers_config(plug_config, config, suppress) != 0) {
+				BBF_ERR("Failed to read apply handlers for service file %s", plug_config);
+				closedir(dir);
+				return -1;
+			}
+		}
+
+		closedir(dir);
+	}
+	return 0;
+}
+
 static int load_micro_service_config(bbfdm_config_t *config)
 {
 	char opt_val[MAX_DM_PATH] = {0};
@@ -765,7 +862,7 @@ static int load_micro_service_config(bbfdm_config_t *config)
 		return -1;
 	}
 
-	if (load_apply_handlers_from_file(config) != 0) {
+	if (load_apply_handlers_from_file(config, false) != 0) {
 		BBF_ERR("Failed to load handlers from service file");
 		return -1;
 	}
@@ -794,6 +891,103 @@ static int load_micro_service_config(bbfdm_config_t *config)
 	return 0;
 }
 
+static int load_micro_service_suppress_config(bbfdm_config_t *config)
+{
+	char opt_val[MAX_DM_PATH] = {0};
+
+	if (!config || strlen(config->service_name) == 0) {
+		BBF_ERR("Invalid input options for service name");
+		return -1;
+	}
+
+	if (load_apply_handlers_from_file(config, true) != 0) {
+		BBF_ERR("Failed to load handlers from service file");
+		return -1;
+	}
+
+	if (INTERNAL_ROOT_TREE == NULL) {
+		// This API will only be called with micro-services started with '-m' option
+
+		snprintf(opt_val, MAX_DM_PATH, "%s/%s.so", BBFDM_DEFAULT_MICROSERVICE_MODULE_PATH, config->service_name);
+		if (!file_exists(opt_val)) {
+			snprintf(opt_val, MAX_DM_PATH, "%s/%s.json", BBFDM_DEFAULT_MICROSERVICE_MODULE_PATH, config->service_name);
+		}
+
+		if (!file_exists(opt_val)) {
+			BBF_ERR("Failed to load service plugin %s opt_val=%s", config->service_name, opt_val);
+			return -1;
+		}
+
+		strncpyt(config->in_name, opt_val, sizeof(config->in_name));
+	}
+
+	snprintf(opt_val, MAX_DM_PATH, "%s/%s", BBFDM_DEFAULT_MICROSERVICE_MODULE_PATH, config->service_name);
+	if (folder_exists(opt_val)) {
+		strncpyt(config->in_plugin_dir, opt_val, sizeof(config->in_plugin_dir));
+	}
+
+	return 0;
+}
+
+static int load_micro_service_suppress_data_model(struct bbfdm_context *daemon_ctx)
+{
+	int err = 0;
+
+	if (INTERNAL_ROOT_TREE) {
+		BBF_INFO("Loading Data Model Internal plugin (%s)", daemon_ctx->config.service_name);
+		err = bbfdm_load_internal_plugin(daemon_ctx, INTERNAL_ROOT_TREE, &DEAMON_DM_ROOT_OBJ);
+	} else {
+		BBF_INFO("Loading Data Model External plugin (%s)", daemon_ctx->config.service_name);
+		err = bbfdm_load_external_plugin(daemon_ctx, &deamon_lib_handle, &DEAMON_DM_ROOT_OBJ);
+	}
+
+	if (err)
+		return err;
+
+	BBF_INFO("Loading sub-modules %s", daemon_ctx->config.in_plugin_dir);
+	bbf_global_init(DEAMON_DM_ROOT_OBJ, daemon_ctx, daemon_ctx->config.in_plugin_dir);
+
+	// Load suppressed dm
+	struct supp_module_node *node = NULL;
+	list_for_each_entry(node, &supp_modules, list) {
+		if (DM_STRCMP(daemon_ctx->config.service_name, node->service) == 0) {
+			// Base service dmtree is already loaded so skip it
+			continue;
+		}
+
+		char opt_val[MAX_DM_PATH] = {0};
+
+		snprintf(opt_val, MAX_DM_PATH, "%s/%s.so", BBFDM_DEFAULT_MICROSERVICE_MODULE_PATH, node->service);
+		if (!file_exists(opt_val)) {
+			snprintf(opt_val, MAX_DM_PATH, "%s/%s.json", BBFDM_DEFAULT_MICROSERVICE_MODULE_PATH, node->service);
+		}
+
+		if (!file_exists(opt_val)) {
+			BBF_ERR("Failed to load service plugin %s opt_val=%s", node->service, opt_val);
+			continue;
+		}
+
+		if (DM_LSTRSTR(opt_val, ".json")) {
+			load_json_plugins(DEAMON_DM_ROOT_OBJ, opt_val);
+		} else if (DM_LSTRSTR(opt_val, ".so")) {
+			load_dotso_plugins(DEAMON_DM_ROOT_OBJ, daemon_ctx, opt_val);
+		}
+
+		char supp_plug_dir[MAX_DM_PATH] = {0};
+		snprintf(supp_plug_dir, MAX_DM_PATH, "%s/%s", BBFDM_DEFAULT_MICROSERVICE_MODULE_PATH, node->service);
+		if (folder_exists(supp_plug_dir)) {
+			load_plugins(DEAMON_DM_ROOT_OBJ, daemon_ctx, supp_plug_dir);
+		}
+	}
+
+	if (DM_STRLEN(daemon_ctx->config.out_name) == 0) {
+		BBF_ERR("output name not defined");
+		return -1;
+	}
+
+	return 0;
+}
+
 static int load_micro_service_data_model(struct bbfdm_context *daemon_ctx)
 {
 	int err = 0;
@@ -810,7 +1004,7 @@ static int load_micro_service_data_model(struct bbfdm_context *daemon_ctx)
 		return err;
 
 	BBF_INFO("Loading sub-modules %s", daemon_ctx->config.in_plugin_dir);
-	bbf_global_init(DEAMON_DM_ROOT_OBJ, daemon_ctx->config.in_plugin_dir);
+	bbf_global_init(DEAMON_DM_ROOT_OBJ, daemon_ctx, daemon_ctx->config.in_plugin_dir);
 
 	if (DM_STRLEN(daemon_ctx->config.out_name) == 0) {
 		BBF_ERR("output name not defined");
@@ -896,6 +1090,9 @@ static void perform_uci_sync_op(struct bbfdm_context *bbfdm_ctx)
 			dynamic_obj[i].uci_sync_handler(bbfdm_ctx);
 		}
 	}
+
+	// Now execute sync handlers of loaded plugins
+	perform_dotso_plugin_sync(bbfdm_ctx);
 
 	free_changed_uci(bbfdm_ctx);
 
@@ -1035,6 +1232,66 @@ int bbfdm_ubus_register_init(struct bbfdm_context *bbfdm_ctx)
 	if (err) {
 		BBF_ERR("Failed to load micro-service data model");
 		return err;
+	}
+
+	err = regiter_ubus_object(bbfdm_ctx);
+	if (err != UBUS_STATUS_OK)
+		return -1;
+
+	err = bbfdm_refresh_references(BBFDM_BOTH, bbfdm_ctx->config.out_name);
+	if (err) {
+		BBF_ERR("Failed to refresh instance data base");
+		return -1;
+	}
+
+	err = register_bbfdm_apply_event(bbfdm_ctx);
+	if (err) {
+		BBF_ERR("Failed to register bbfdm apply event");
+		return -1;
+	}
+
+	return register_events_to_ubus(bbfdm_ctx->ubus_ctx, &bbfdm_ctx->event_handlers);
+}
+
+int bbfdm_ubus_register_suppress_init(struct bbfdm_context *bbfdm_ctx)
+{
+	int err = 0;
+
+	// Set the logmask with default, if not already set by api
+	if (s_log_level == 0xff) {
+		BBF_INFO("Log level not set, setting default value %d", LOG_ERR);
+		bbfdm_ubus_set_log_level(LOG_ERR);
+	}
+
+	if (bbfdm_ctx->ubus_ctx == NULL) {
+		err = bbfdm_ubus_init(bbfdm_ctx);
+		if (err) {
+			BBF_ERR("Failed to initialize ubus_ctx internally");
+			return err;
+		}
+	}
+
+	bbfdm_ctx_init(bbfdm_ctx);
+
+	INIT_LIST_HEAD(&supp_modules);
+
+	err = load_micro_service_suppress_config(&bbfdm_ctx->config);
+	if (err) {
+		BBF_ERR("Failed to load micro-service config");
+		return err;
+	}
+
+	err = load_micro_service_suppress_data_model(bbfdm_ctx);
+	if (err) {
+		BBF_ERR("Failed to load micro-service data model");
+		return err;
+	}
+
+	struct supp_module_node *node = NULL, *tmp = NULL;
+	list_for_each_entry_safe(node, tmp, &supp_modules, list) {
+		list_del(&node->list);
+		BBFDM_FREE(node->service);
+		BBFDM_FREE(node);
 	}
 
 	err = regiter_ubus_object(bbfdm_ctx);

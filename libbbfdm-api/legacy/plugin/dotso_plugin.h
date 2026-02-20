@@ -14,7 +14,8 @@
 
 #include "../dmcommon.h"
 
-int load_dotso_plugins(DMOBJ *entryobj, const char *path);
-int free_dotso_plugins(void);
+int load_dotso_plugins(DMOBJ *entryobj, struct bbfdm_context *daemon_ctx, const char *path);
+int free_dotso_plugins(struct bbfdm_context *daemon_ctx);
+void perform_dotso_plugin_sync(struct bbfdm_context *bbfdm_ctx);
 
 #endif //__DOTSO_PLUGIN_H__

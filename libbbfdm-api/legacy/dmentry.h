@@ -25,8 +25,8 @@ int bbf_fault_map(struct dmctx *ctx, int fault);
 
 int bbf_entry_method(struct dmctx *ctx, int cmd);
 
-void bbf_global_init(DMOBJ *dm_entryobj, const char *plugin_path);
-void bbf_global_clean(DMOBJ *dm_entryobj);
+void bbf_global_init(DMOBJ *dm_entryobj, struct bbfdm_context *daemon_ctx, const char *plugin_path);
+void bbf_global_clean(DMOBJ *dm_entryobj, struct bbfdm_context *daemon_ctx);
 
 int dm_validate_allowed_objects(struct dmctx *ctx, struct dm_reference *reference, char *objects[]);
 

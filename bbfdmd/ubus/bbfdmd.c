@@ -468,11 +468,19 @@ int main(int argc, char **argv)
 	uloop_init();
 	ubus_add_uloop(&g_ubus_ctx);
 
+#ifdef BBFDM_DM_SERVICE_RAM_OPTIMIZED
+	err = register_suppress_services(&g_ubus_ctx);
+	if (err) {
+		BBFDM_ERR("Failed to load micro-services");
+		goto end;
+	}
+#else
 	err = register_services(&g_ubus_ctx);
 	if (err) {
 		BBFDM_ERR("Failed to load micro-services");
 		goto end;
 	}
+#endif
 
 	err = ubus_add_object(&g_ubus_ctx, &bbfdm_object);
 	if (err != UBUS_STATUS_OK) {

@@ -40,3 +40,8 @@ FILE(GLOB libbbfdm-api_include_headers include/*.h)
 INSTALL(FILES ${libbbfdm-api_include_headers}
 	DESTINATION usr/include
 )
+
+FILE(GLOB libbbfdm-api_plugin_headers plugin/*.h)
+INSTALL(FILES ${libbbfdm-api_plugin_headers}
+	DESTINATION usr/include/libbbfdm-api/legacy/plugin
+)

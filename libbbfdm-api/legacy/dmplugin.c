@@ -99,7 +99,7 @@ static void dm_check_dynamic_obj(struct list_head *mem_list, DMNODE *parent_node
 
 	if (parent_node->obj) {
 		if (parent_node->obj->nextdynamicobj) {
-			for (int i = 0; i < __INDX_DYNAMIC_MAX - 1; i++) {
+			for (int i = 0; i < __INDX_DYNAMIC_MAX; i++) {
 				struct dm_dynamic_obj *next_dyn_array = parent_node->obj->nextdynamicobj + i;
 				if (next_dyn_array->nextobj) {
 					for (int j = 0; next_dyn_array->nextobj[j]; j++) {
@@ -231,7 +231,7 @@ static int compare(const struct dirent **a, const struct dirent **b)
 	return strcasecmp((*a)->d_name, (*b)->d_name);
 }
 
-void load_plugins(DMOBJ *dm_entryobj, const char *plugin_path)
+void load_plugins(DMOBJ *dm_entryobj, struct bbfdm_context *daemon_ctx, const char *plugin_path)
 {
 	struct dirent **namelist;
 
@@ -253,7 +253,7 @@ void load_plugins(DMOBJ *dm_entryobj, const char *plugin_path)
 		if (DM_LSTRSTR(namelist[i]->d_name, ".json")) {
 			load_json_plugins(dm_entryobj, file_path);
 		} else if (DM_LSTRSTR(namelist[i]->d_name, ".so")) {
-			load_dotso_plugins(dm_entryobj, file_path);
+			load_dotso_plugins(dm_entryobj, daemon_ctx, file_path);
 		}
 
 		FREE(namelist[i]);
@@ -262,10 +262,10 @@ void load_plugins(DMOBJ *dm_entryobj, const char *plugin_path)
 	FREE(namelist);
 }
 
-void free_plugins(DMOBJ *dm_entryobj)
+void free_plugins(DMOBJ *dm_entryobj, struct bbfdm_context *daemon_ctx)
 {
 	free_all_dynamic_nodes(dm_entryobj);
 
 	free_json_plugins();
-	free_dotso_plugins();
+	free_dotso_plugins(daemon_ctx);
 }

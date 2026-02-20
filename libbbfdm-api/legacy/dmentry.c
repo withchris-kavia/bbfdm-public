@@ -243,18 +243,18 @@ int bbf_entry_method(struct dmctx *ctx, int cmd)
 	return bbf_fault_map(ctx, fault);
 }
 
-void bbf_global_init(DMOBJ *dm_entryobj, const char *plugin_path)
+void bbf_global_init(DMOBJ *dm_entryobj, struct bbfdm_context *daemon_ctx, const char *plugin_path)
 {
 	bbfdm_ensure_folder_exists(DATA_MODEL_DB_PATH);
 
 	dm_dynamic_initmem(&global_memhead);
 	dm_ubus_cache_init();
-	load_plugins(dm_entryobj, plugin_path);
+	load_plugins(dm_entryobj, daemon_ctx, plugin_path);
 }
 
-void bbf_global_clean(DMOBJ *dm_entryobj)
+void bbf_global_clean(DMOBJ *dm_entryobj, struct bbfdm_context *daemon_ctx)
 {
-	free_plugins(dm_entryobj);
+	free_plugins(dm_entryobj, daemon_ctx);
 	dm_ubus_cache_free();
 	dm_dynamic_cleanmem(&global_memhead);
 }

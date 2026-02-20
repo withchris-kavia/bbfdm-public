@@ -6,8 +6,16 @@
 #include <libubox/list.h>
 
 #include "libbbfdm-api/legacy/dmbbf.h"
+#include "libbbfdm-api/legacy/dmplugin.h"
+#include "libbbfdm-api/legacy/plugin/json_plugin.h"
+#include "libbbfdm-api/legacy/plugin/dotso_plugin.h"
 
 #define BBFDM_DEFAULT_UBUS_OBJ "bbfdm"
+
+struct supp_module_node {
+	char *service;
+	struct list_head list;
+};
 
 struct bbfdm_async_req {
 	struct ubus_context *ctx;
@@ -21,25 +29,6 @@ struct apply_handler_node {
 	struct list_head list;
 };
 
-typedef struct bbfdm_config {
-	struct list_head apply_handlers;
-	char service_name[32]; // Service name for micro-service identification
-	char in_name[128]; // Service plugin path
-	char in_plugin_dir[128];  // Service extra/internal plugin directory path
-	char out_name[128]; // Ubus name to use
-} bbfdm_config_t;
-
-struct bbfdm_context {
-	bbfdm_config_t config;
-	struct ubus_event_handler apply_event;
-	struct ubus_context *ubus_ctx;
-	struct ubus_object ubus_obj;
-	struct list_head event_handlers;
-	struct list_head changed_uci;
-	bool internal_ubus_ctx;
-	char uci_change_proto[10];
-};
-
 typedef struct bbfdm_data {
 	struct ubus_context *ctx;
 	struct ubus_object *obj;
@@ -50,6 +39,7 @@ typedef struct bbfdm_data {
 } bbfdm_data_t;
 
 int bbfdm_ubus_register_init(struct bbfdm_context *bbfdm_ctx);
+int bbfdm_ubus_register_suppress_init(struct bbfdm_context *bbfdm_ctx);
 int bbfdm_ubus_register_free(struct bbfdm_context *bbfdm_ctx);
 
 __attribute__((deprecated("Use bbfdm_ubus_register_init() instead of bbfdm_ubus_regiter_init()")))

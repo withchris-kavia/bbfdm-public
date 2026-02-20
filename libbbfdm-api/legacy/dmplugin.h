@@ -11,6 +11,8 @@
 #ifndef __DMPLUGIN_H__
 #define __DMPLUGIN_H__
 
+#include "dmbbf.h"
+
 DMOBJ *find_entry_obj(DMOBJ *entryobj, const char *obj_path);
 
 void disable_entry_obj(DMOBJ *entryobj, const char *obj_path, const char *parent_obj, const char *plugin_path);
@@ -21,7 +23,7 @@ int get_entry_leaf_idx(DMLEAF *entryleaf);
 int get_obj_idx(DMOBJ **entryobj);
 int get_leaf_idx(DMLEAF **entryleaf);
 
-void load_plugins(DMOBJ *dm_entryobj, const char *plugin_path);
-void free_plugins(DMOBJ *dm_entryobj);
+void load_plugins(DMOBJ *dm_entryobj, struct bbfdm_context *daemon_ctx, const char *plugin_path);
+void free_plugins(DMOBJ *dm_entryobj, struct bbfdm_context *daemon_ctx);
 
 #endif //__DMPLUGIN_H__

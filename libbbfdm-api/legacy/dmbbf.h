@@ -27,6 +27,25 @@
 #include "dmmem.h"
 #include "dmapi.h"
 
+typedef struct bbfdm_config {
+	struct list_head apply_handlers;
+	char service_name[32]; // Service name for micro-service identification
+	char in_name[128]; // Service plugin path
+	char in_plugin_dir[128];  // Service extra/internal plugin directory path
+	char out_name[128]; // Ubus name to use
+} bbfdm_config_t;
+
+struct bbfdm_context {
+	bbfdm_config_t config;
+	struct ubus_event_handler apply_event;
+	struct ubus_context *ubus_ctx;
+	struct ubus_object ubus_obj;
+	struct list_head event_handlers;
+	struct list_head changed_uci;
+	bool internal_ubus_ctx;
+	char uci_change_proto[10];
+};
+
 int get_number_of_entries(struct dmctx *ctx, void *data, char *instance, int (*browseinstobj)(struct dmctx *ctx, struct dmnode *node, void *data, char *instance)); // To be removed later!!!!!!!!!!!!
 
 char *handle_instance(struct dmctx *dmctx, DMNODE *parent_node, struct uci_section *s, const char *inst_opt, const char *alias_opt);

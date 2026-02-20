@@ -32,7 +32,7 @@ static void add_list_loaded_libraries(struct list_head *library_list, void *libr
 	lib->library = library;
 }
 
-static void free_all_list_open_library(struct list_head *library_list)
+static void free_all_list_open_library(struct list_head *library_list, struct bbfdm_context *daemon_ctx)
 {
 	struct loaded_library *lib = NULL, *tmp = NULL;
 
@@ -40,6 +40,19 @@ static void free_all_list_open_library(struct list_head *library_list)
 		list_del(&lib->list);
 
 		if (lib->library) {
+			DM_MAP_OBJ *dynamic_obj = NULL;
+
+			//Dynamic Object
+			*(void **) (&dynamic_obj) = dlsym(lib->library, "tDynamicObj");
+
+			if (dynamic_obj) {
+				// Clean module
+				for (int i = 0; dynamic_obj[i].path; i++) {
+					if (dynamic_obj[i].clean_module)
+						dynamic_obj[i].clean_module(daemon_ctx);
+				}
+			}
+
 			dlclose(lib->library);
 			lib->library = NULL;
 		}
@@ -60,7 +73,7 @@ static void dotso_plugin_disable_requested_entries(DMOBJ *entryobj, DMOBJ *reque
 		disable_entry_leaf(entryobj, requested_leaf->parameter, parent_obj, plugin_path);
 }
 
-int load_dotso_plugins(DMOBJ *entryobj, const char *plugin_path)
+int load_dotso_plugins(DMOBJ *entryobj, struct bbfdm_context *daemon_ctx, const char *plugin_path)
 {
 	void *handle = dlopen(plugin_path, RTLD_NOW|RTLD_LOCAL);
 	if (!handle) {
@@ -130,15 +143,38 @@ int load_dotso_plugins(DMOBJ *entryobj, const char *plugin_path)
 		}
 
 		if (dynamic_obj[i].init_module)
-			dynamic_obj[i].init_module(NULL);
+			dynamic_obj[i].init_module(daemon_ctx);
 	}
 	add_list_loaded_libraries(&loaded_library_list, handle);
 
 	return 0;
 }
 
-int free_dotso_plugins(void)
+int free_dotso_plugins(struct bbfdm_context *daemon_ctx)
 {
-	free_all_list_open_library(&loaded_library_list);
+	free_all_list_open_library(&loaded_library_list, daemon_ctx);
 	return 0;
+}
+
+void perform_dotso_plugin_sync(struct bbfdm_context *bbfdm_ctx)
+{
+	struct loaded_library *lib = NULL;
+	struct list_head *library_list = &loaded_library_list;
+
+	list_for_each_entry(lib, library_list, list) {
+		if (lib->library) {
+			DM_MAP_OBJ *dynamic_obj = NULL;
+
+			//Dynamic Object
+			*(void **) (&dynamic_obj) = dlsym(lib->library, "tDynamicObj");
+
+			if (dynamic_obj) {
+				// Clean module
+				for (int i = 0; dynamic_obj[i].path; i++) {
+					if (dynamic_obj[i].uci_sync_handler)
+						dynamic_obj[i].uci_sync_handler(bbfdm_ctx);
+				}
+			}
+		}
+	}
 }
