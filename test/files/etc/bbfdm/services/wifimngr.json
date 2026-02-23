@@ -1,0 +1,47 @@
+{
+  "daemon": {
+    "enable": "1",
+    "service_name": "wifimngr",
+    "unified_daemon": true,
+    "services": [
+      {
+        "parent_dm": "Device.WiFi.",
+        "object": "Radio"
+      },
+      {
+        "parent_dm": "Device.WiFi.",
+        "object": "SSID"
+      },
+      {
+        "parent_dm": "Device.WiFi.",
+        "object": "AccessPoint"
+      },
+      {
+        "parent_dm": "Device.WiFi.",
+        "object": "NeighboringWiFiDiagnostic"
+      },
+      {
+        "parent_dm": "Device.WiFi.",
+        "object": "EndPoint"
+      },
+      {
+        "parent_dm": "Device.WiFi.",
+        "object": "Reset()"
+      }
+    ],
+    "config": {
+      "loglevel": "3"
+    },
+    "apply_handler": {
+      "uci": [
+        {
+          "file": [
+            "wireless",
+            "mapcontroller"
+          ],
+          "external_handler": "/etc/wifidm/bbf_config_reload.sh"
+        }
+      ]
+    }
+  }
+}
