@@ -73,6 +73,7 @@ static void receive_schema_result(struct ubus_request *req, int type __attribute
 void fill_service_schema(struct ubus_context *ubus_ctx, int ubus_timeout, const char *service_name, struct blob_buf **service_schema)
 {
 	uint32_t ubus_id;
+	int retry;
 
 	if (!ubus_ctx || !service_name || !service_schema)
 		return;
@@ -82,7 +83,12 @@ void fill_service_schema(struct ubus_context *ubus_ctx, int ubus_timeout, const 
 		BBFDM_FREE(*service_schema);
 	}
 
-	if (!ubus_lookup_id(ubus_ctx, service_name, &ubus_id)) {
+	for (retry = 0; retry < 5; retry++) {
+		if (ubus_lookup_id(ubus_ctx, service_name, &ubus_id)) {
+			BBFDM_WARNING("Failed to lookup UBUS object: %s (attempt %d/5)", service_name, retry + 1);
+			continue;
+		}
+
 		struct blob_buf bb = {0};
 
 		*service_schema = (struct blob_buf *)calloc(1, sizeof(struct blob_buf));
@@ -104,14 +110,19 @@ void fill_service_schema(struct ubus_context *ubus_ctx, int ubus_timeout, const 
 
 		int err = ubus_invoke(ubus_ctx, ubus_id, "schema", bb.head, receive_schema_result, (void *)*service_schema, ubus_timeout);
 
-		if (err != 0) {
-			BBFDM_ERR("UBUS invoke failed [object: %s, method: schema] with error (%d)", service_name, err);
-		}
-
 		blob_buf_free(&bb);
-	} else {
-		BBFDM_WARNING("Failed to lookup UBUS object: %s", service_name);
+
+		if (err == 0)
+			break;
+
+		BBFDM_WARNING("UBUS invoke failed [object: %s, method: schema] with error (%d) (attempt %d/5)", service_name, err, retry + 1);
+
+		blob_buf_free(*service_schema);
+		BBFDM_FREE(*service_schema);
 	}
+
+	if (*service_schema == NULL)
+		BBFDM_WARNING("Failed to fetch schema for service '%s' after 5 attempts", service_name);
 }
 
 static int load_service_from_file(struct ubus_context *ubus_ctx, const char *filename, const char *file_path)

@@ -177,7 +177,7 @@ static void bbfdm_ubus_add_event_cb(struct ubus_context *ctx, struct ubus_event_
 				service->is_blacklisted = false;
 				service->consecutive_timeouts = 0;
 				service_found = true;
-				fill_service_schema(ctx, 5000, service->name, &service->dm_schema);
+				fill_service_schema(ctx, 2000, service->name, &service->dm_schema);
 				BBFDM_INFO("Service '%s' found in registry. Resetting blacklist and timeout counters.", path);
 				break;
 			}
