@@ -15,6 +15,9 @@
 #include "security.h"
 #include "schedules.h"
 
+#define DM_VERSION_FILE "/etc/bbfdm/datamodel.json"
+char g_root_dm_version[32] = {0};
+
 /*************************************************************
 * COMMON FUNCTIONS
 **************************************************************/
@@ -75,7 +78,39 @@ static void _exec_factoryreset(const void *arg1, void *arg2)
 **************************************************************/
 static int get_Device_RootDataModelVersion(char *refparam, struct dmctx *ctx, void *data, char *instance, char **value)
 {
-	*value = dmstrdup("2.19");
+	if (DM_STRLEN(g_root_dm_version) == 0) {
+		const char *version;
+		json_object *json_root, *jobj_version = NULL;
+
+		if (file_exists(DM_VERSION_FILE) == false) {
+			BBFDM_ERR("JSON file: %s, not present", DM_VERSION_FILE);
+			goto exit;
+		}
+
+		json_root = json_object_from_file(DM_VERSION_FILE);
+		if (!json_root) {
+			BBFDM_ERR("Failed to read JSON file: %s", DM_VERSION_FILE);
+			goto exit;
+		}
+
+		json_object_object_get_ex(json_root, "version", &jobj_version);
+		version = (jobj_version) ? json_object_get_string(jobj_version) : "";
+
+		if (DM_STRLEN(version)) {
+			DM_STRNCPY(g_root_dm_version, version, sizeof(g_root_dm_version));
+			json_object_put(json_root);
+		} else {
+			json_object_put(json_root);
+			goto exit;
+		}
+	} else {
+		*value = g_root_dm_version;
+	}
+	return 0;
+
+exit:
+	DM_STRNCPY(g_root_dm_version,"2.19", sizeof(g_root_dm_version));
+	*value = g_root_dm_version;
 	return 0;
 }
 
