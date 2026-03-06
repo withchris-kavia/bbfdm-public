@@ -70,6 +70,45 @@ static int bbfdm_ubus_invoke(const char *obj, const char *method, struct blob_at
 	return rc;
 }
 
+static void handle_uci_commit(const char *cmd, struct blob_attr *modified_uci, bool commit)
+{
+	bool uci_exist = false;
+
+	if (modified_uci == NULL)
+		return;
+
+	struct blob_buf bb = {0};
+
+	memset(&bb, 0, sizeof(struct blob_buf));
+
+	blob_buf_init(&bb, 0);
+
+	blobmsg_add_string(&bb, "proto", "both");
+
+	if (strcmp(cmd, "get") == 0 || strcmp(cmd, "schema") == 0 ||
+	    strcmp(cmd, "instances") == 0 || commit == false) {
+		blobmsg_add_u8(&bb, "reload", false);
+	} else {
+		blobmsg_add_u8(&bb, "reload", true);
+	}
+
+	void *array = blobmsg_open_array(&bb, "services");
+	struct blob_attr *attr = NULL;
+	int remaining = 0;
+
+	blobmsg_for_each_attr(attr, modified_uci, remaining) {
+		blobmsg_add_string(&bb, NULL, blobmsg_get_string(attr));
+		uci_exist = true;
+	}
+
+	blobmsg_close_array(&bb, array);
+
+	if (uci_exist)
+		BBFDM_UBUS_INVOKE_SYNC("bbf.config", commit ? "commit" : "revert", bb.head, 10000, NULL, NULL);
+
+	blob_buf_free(&bb);
+}
+
 static void __ubus_callback(struct ubus_request *req, int msgtype __attribute__((unused)), struct blob_attr *msg)
 {
 	struct blob_attr *cur = NULL;
@@ -89,14 +128,17 @@ static void __ubus_callback(struct ubus_request *req, int msgtype __attribute__(
 
 	cli_data_t *cli_data = (cli_data_t *)req->priv;
 	struct blob_attr *parameters = get_results_array(msg);
+	struct blob_attr *modified_uci = get_modified_uci_array(msg);
 
 	if (parameters == NULL) {
 		cli_data->ubus_status = false;
+		handle_uci_commit(cli_data->cmd, modified_uci, false);
 		return;
 	}
 
 	if (blobmsg_len(parameters) == 0) {
 		cli_data->ubus_status = true;
+		handle_uci_commit(cli_data->cmd, modified_uci, true);
 		return;
 	}
 
@@ -111,6 +153,7 @@ static void __ubus_callback(struct ubus_request *req, int msgtype __attribute__(
 		if (tb[3]) {
 			printf("Fault %u: %s\n", blobmsg_get_u32(tb[3]), tb[6] ? blobmsg_get_string(tb[6]) : "");
 			cli_data->ubus_status = false;
+			handle_uci_commit(cli_data->cmd, modified_uci, false);
 			return;
 		}
 
@@ -131,6 +174,8 @@ static void __ubus_callback(struct ubus_request *req, int msgtype __attribute__(
 
 		cli_data->ubus_status = true;
 	}
+
+	handle_uci_commit(cli_data->cmd, modified_uci, true);
 }
 
 static int cli_exec_cmd(cli_data_t *cli_data, const char *path, const char *value)

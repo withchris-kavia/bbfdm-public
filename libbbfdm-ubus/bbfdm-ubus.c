@@ -380,11 +380,6 @@ int bbfdm_set_handler(struct ubus_context *ctx, struct ubus_object *obj,
 
 	bbf_init(&data.bbf_ctx);
 	fault = bbfdm_set_value(&data);
-
-	if (data.bbf_ctx.dm_type == BBFDM_BOTH) {
-		bbf_entry_services(data.bbf_ctx.dm_type, (!fault) ? true : false, true);
-	}
-
 	bbf_cleanup(&data.bbf_ctx);
 
 	if (!fault) {
@@ -496,10 +491,6 @@ int bbfdm_add_handler(struct ubus_context *ctx, struct ubus_object *obj,
 	}
 
 end:
-	if (data.bbf_ctx.dm_type == BBFDM_BOTH) {
-		bbf_entry_services(data.bbf_ctx.dm_type, (!fault) ? true : false, true);
-	}
-
 	bbf_cleanup(&data.bbf_ctx);
 
 	if (!fault) {
@@ -567,10 +558,6 @@ int bbfdm_del_handler(struct ubus_context *ctx, struct ubus_object *obj,
 	data.bbf_ctx.in_param = tb[DM_DEL_PATH] ? blobmsg_get_string(tb[DM_DEL_PATH]) : "";
 
 	fault = create_del_response(&data);
-
-	if (data.bbf_ctx.dm_type == BBFDM_BOTH) {
-		bbf_entry_services(data.bbf_ctx.dm_type, (!fault) ? true : false, true);
-	}
 
 	bbf_cleanup(&data.bbf_ctx);
 	free_path_list(&paths_list);
@@ -679,6 +666,15 @@ static int read_apply_handlers_config(const char *serv_config, bbfdm_config_t *c
 		BBFDM_ERR("Failed to find daemon object");
 		json_object_put(json_root);
 		return -1;
+	}
+
+	json_object *enable_jobj = NULL;
+	json_object_object_get_ex(daemon_config, "enable", &enable_jobj);
+	bool enable = enable_jobj ? json_object_get_boolean(enable_jobj) : false;
+	if (!enable) {
+		BBFDM_DEBUG("%s is disabled", serv_config);
+		json_object_put(json_root);
+		return 0;
 	}
 
 	if (suppress == true) {
@@ -1078,6 +1074,18 @@ int bbfdm_print_data_model_schema(struct bbfdm_context *bbfdm_ctx, const enum bb
 	return err;
 }
 
+static void send_sync_completed(struct bbfdm_context *bbfdm_ctx)
+{
+	struct blob_buf bb = {0};
+	memset(&bb, 0, sizeof(struct blob_buf));
+
+	blob_buf_init(&bb, 0);
+	blobmsg_add_string(&bb, "service", bbfdm_ctx->config.service_name);
+
+	ubus_send_event(bbfdm_ctx->ubus_ctx, "dmservice.sync_complete", bb.head);
+	blob_buf_free(&bb);
+}
+
 static void perform_uci_sync_op(struct bbfdm_context *bbfdm_ctx)
 {
 	DM_MAP_OBJ *dynamic_obj = INTERNAL_ROOT_TREE;
@@ -1123,8 +1131,10 @@ static void bbfdm_apply_event_cb(struct ubus_context *ctx __attribute__((unused)
 	struct blob_attr *tb[2] = {NULL, NULL};
 	blobmsg_parse(p, 2, tb, blob_data(msg), blob_len(msg));
 
-	if (!tb[0] || !tb[1])
+	if (!tb[0] || !tb[1]) {
+		send_sync_completed(bbfdm_ctx);
 		return;
+	}
 
 	const char *proto = blobmsg_get_string(tb[0]);
 	struct blob_attr *attr = NULL;
@@ -1174,6 +1184,8 @@ static void bbfdm_apply_event_cb(struct ubus_context *ctx __attribute__((unused)
 		snprintf(bbfdm_ctx->uci_change_proto, sizeof(bbfdm_ctx->uci_change_proto), "%s", proto);
 		perform_uci_sync_op(bbfdm_ctx);
 	}
+
+	send_sync_completed(bbfdm_ctx);
 }
 
 static int register_bbfdm_apply_event(struct bbfdm_context *bbfdm_ctx)

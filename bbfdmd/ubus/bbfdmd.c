@@ -61,6 +61,44 @@ static void service_request_timeout(struct uloop_timeout *timeout)
 	BBFDM_FREE(tracker);
 }
 
+static void service_result_callback(struct ubus_request *req __attribute__((unused)), int type __attribute__((unused)), struct blob_attr *msg)
+{
+	if (!msg)
+		return;
+
+	struct blob_buf bb = {0};
+	bool uci_exist = false;
+
+	memset(&bb, 0, sizeof(struct blob_buf));
+	blob_buf_init(&bb, 0);
+
+	blobmsg_add_string(&bb, "proto", "both");
+	blobmsg_add_u8(&bb, "reload", false);
+
+	void *array = blobmsg_open_array(&bb, "services");
+
+	struct blob_attr *modified_uci = get_modified_uci_array(msg);
+	if (modified_uci) {
+		struct blob_attr *attr = NULL;
+		int remaining = 0;
+
+		blobmsg_for_each_attr(attr, modified_uci, remaining) {
+			char *file = blobmsg_get_string(attr);
+			if (file && strncmp(file, "/etc/bbfdm/dmmap/", 17) == 0) {
+				blobmsg_add_string(&bb, NULL, file);
+				uci_exist = true;
+			}
+		}
+	}
+
+	blobmsg_close_array(&bb, array);
+
+	if (uci_exist)
+		BBFDM_UBUS_INVOKE_SYNC("bbf.config", "commit", bb.head, 10000, NULL, NULL);
+
+	blob_buf_free(&bb);
+}
+
 static void service_request_complete(struct ubus_request *req, int ret)
 {
 	struct service_request_tracker *tracker = container_of(req, struct service_request_tracker, async_request);
@@ -120,6 +158,7 @@ static void verify_service(struct ubus_context *ubus_ctx, service_entry_t *servi
 		uloop_timeout_cancel(&tracker->timeout);
 		BBFDM_FREE(tracker);
 	} else {
+		tracker->async_request.data_cb = service_result_callback;
 		tracker->async_request.complete_cb = service_request_complete;
 		ubus_complete_request_async(ubus_ctx, &tracker->async_request);
 	}

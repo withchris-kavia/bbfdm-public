@@ -19,26 +19,11 @@ void bbfdm_get(bbfdm_data_t *data, int method)
 	struct pathNode *pn = NULL;
 	int fault = 0;
 
-	LIST_HEAD(temp_list);
-
 	if (method == BBF_INSTANCES) {
-		// referesh reference db
-		struct dmctx bbf_ctx = {
-			.in_param = ROOT_NODE,
-			.dm_type = data->bbf_ctx.dm_type
-		};
-
-		bbf_init(&bbf_ctx);
-		bbfdm_cmd_exec(&bbf_ctx, BBF_REFERENCES_DB);
-		list_splice_tail_init(bbf_ctx.modified_uci_head, &temp_list);
-		bbf_cleanup(&bbf_ctx);
+		bbfdm_refresh_references(data->bbf_ctx.dm_type, NULL);
 	}
 
 	bbf_init(&data->bbf_ctx);
-
-	if (!list_empty(&temp_list)) {
-		list_splice_tail_init(&temp_list, data->bbf_ctx.modified_uci_head);
-	}
 
 	void *array = blobmsg_open_array(&data->bbf_ctx.bb, "results");
 
@@ -77,11 +62,6 @@ void bbfdm_get(bbfdm_data_t *data, int method)
 
 	if (data->ctx && data->req) {
 		ubus_send_reply(data->ctx, data->req, data->bbf_ctx.bb.head);
-	}
-
-	// Apply all bbfdm dmmap changes
-	if (data->bbf_ctx.dm_type == BBFDM_BOTH) {
-		dmuci_commit_bbfdm();
 	}
 
 	bbf_cleanup(&data->bbf_ctx);

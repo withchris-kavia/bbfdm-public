@@ -58,6 +58,7 @@ struct bbf_config_async_req {
 	struct ubus_request_data req;
 	struct uloop_timeout timeout;
 	struct blob_attr *services;
+	struct ubus_event_handler sync_ev;
 	struct config_package package[MAX_PACKAGE_NUM];
 	struct list_head changed_uci_list;
 };
@@ -465,12 +466,12 @@ wait:
 	return false;
 }
 
-static void send_bbf_apply_event(int idx, struct list_head *changed_uci_list)
+static int send_bbf_apply_event(int idx, struct list_head *changed_uci_list)
 {
 	char protocol[16] = {0};
 
 	if (changed_uci_list == NULL || list_empty(changed_uci_list))
-		return;
+		return -1;
 
 	struct ubus_context *ctx;
 	struct blob_buf bb = {0};
@@ -501,7 +502,7 @@ static void send_bbf_apply_event(int idx, struct list_head *changed_uci_list)
 	if (ctx == NULL) {
 		ULOG_ERR("Can't create UBUS context for 'bbfdm.apply' event");
 		blob_buf_free(&bb);
-		return;
+		return -1;
 	}
 
 	ULOG_INFO("Sending bbfdm.apply event");
@@ -509,6 +510,8 @@ static void send_bbf_apply_event(int idx, struct list_head *changed_uci_list)
 	ubus_send_event(ctx, "bbfdm.apply", bb.head);
 	blob_buf_free(&bb);
 	ubus_free(ctx);
+
+	return 0;
 }
 
 static void send_reply(struct ubus_context *ctx, struct ubus_request_data *req, const char *message, const char *description)
@@ -523,16 +526,110 @@ static void send_reply(struct ubus_context *ctx, struct ubus_request_data *req, 
 	blob_buf_free(&bb);
 }
 
-static void complete_deferred_request(struct bbf_config_async_req *async_req)
+static void sync_event_handler(struct ubus_context *ctx, struct ubus_event_handler *ev,
+			const char *type, struct blob_attr *msg)
 {
-	if (!async_req)
+	if (msg == NULL || ev == NULL)
 		return;
+
+	struct bbf_config_async_req *async_req = container_of(ev, struct bbf_config_async_req, sync_ev);
+	if (async_req == NULL)
+		return;
+
+	// validate if the event received from core service
+	const struct blobmsg_policy p[1] = {
+		{ "service", BLOBMSG_TYPE_STRING }
+	};
+
+	struct blob_attr *tb[1] = {0};
+	if (blobmsg_parse(p, 1, tb, blob_data(msg), blob_len(msg)) != 0)
+		return;
+
+	if (!tb[0] || strcmp("core", blobmsg_get_string(tb[0])) != 0) {
+		return;
+	}
+
+	uloop_timeout_cancel(&(async_req->timeout));
 
 	// Send the response
 	send_reply(async_req->ctx, &async_req->req, "status", "ok");
 
 	// Complete the deferred request and send the response
 	ubus_complete_deferred_request(async_req->ctx, &async_req->req, 0);
+
+	ubus_unregister_event_handler(async_req->ctx, &(async_req->sync_ev));
+
+	// Free the allocated memory
+	FREE(async_req->services);
+	FREE(async_req);
+
+	ULOG_INFO("Commit handler exit");
+}
+
+static void sync_listen_timeout(struct uloop_timeout *timeout)
+{
+	struct bbf_config_async_req *async_req = container_of(timeout, struct bbf_config_async_req, timeout);
+	if (async_req == NULL)
+		return;
+
+	ULOG_INFO("Timeout occurred for sync_complete event from core");
+
+	// Send the response
+	send_reply(async_req->ctx, &async_req->req, "status", "ok");
+
+	// Complete the deferred request and send the response
+	ubus_complete_deferred_request(async_req->ctx, &async_req->req, 0);
+
+	ubus_unregister_event_handler(async_req->ctx, &(async_req->sync_ev));
+
+	// Free the allocated memory
+	FREE(async_req->services);
+	FREE(async_req);
+
+	ULOG_INFO("Commit handler exit");
+}
+
+static void wait_for_sync_complete_event(struct bbf_config_async_req *async_req)
+{
+	if (async_req == NULL)
+		return;
+
+	if (ubus_register_event_handler(async_req->ctx, &(async_req->sync_ev), "dmservice.sync_complete")) {
+		ULOG_ERR("Failed to register dmservice.sync_complete event handler");
+		// Send 'bbf.apply' event
+		send_bbf_apply_event(async_req->idx, &async_req->changed_uci_list);
+		goto exit;
+	}
+
+	uloop_timeout_set(&(async_req->timeout), 5000);
+
+	// Send 'bbf.apply' event
+	if (0 != send_bbf_apply_event(async_req->idx, &async_req->changed_uci_list)) {
+		uloop_timeout_cancel(&(async_req->timeout));
+		ubus_unregister_event_handler(async_req->ctx, &(async_req->sync_ev));
+		goto exit;
+	}
+
+	return;
+
+exit:
+	// Send the response
+	send_reply(async_req->ctx, &async_req->req, "status", "ok");
+
+	// Complete the deferred request and send the response
+	ubus_complete_deferred_request(async_req->ctx, &async_req->req, 0);
+
+	// Free the allocated memory
+	FREE(async_req->services);
+	FREE(async_req);
+
+	ULOG_INFO("Commit handler exit");
+}
+
+static void complete_deferred_request(struct bbf_config_async_req *async_req)
+{
+	if (!async_req)
+		return;
 
 	// If any uci is changed externally then add it in bbf.apply event
 	struct modi_uci_node *node = NULL, *tmp = NULL;
@@ -549,17 +646,14 @@ static void complete_deferred_request(struct bbf_config_async_req *async_req)
 		FREE(node);
 	}
 
-	// Send 'bbf.apply' event
-	send_bbf_apply_event(async_req->idx, &async_req->changed_uci_list);
-
-	// Free the allocated memory
-	FREE(async_req->services);
-	FREE(async_req);
+	// Lets wait for sync_complete from core
+	async_req->timeout.cb = sync_listen_timeout;
+	async_req->sync_ev.cb = sync_event_handler;
 
 	// Set internal commit to false
 	g_internal_commit = false;
 
-	ULOG_INFO("Commit handler exit");
+	wait_for_sync_complete_event(async_req);
 }
 
 static void end_request_callback(struct uloop_timeout *t)
@@ -946,27 +1040,22 @@ static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_objec
 		FREE(node);
 	}
 
-	if (monitor) {
+	if (monitor && reload) {
 		ULOG_INFO("Deferring request and setting up async completion");
 		async_req->idx = idx;
 		ubus_defer_request(ctx, req, &async_req->req);
 		async_req->timeout.cb = complete_request_callback;
 		uloop_timeout_set(&async_req->timeout, 2000);
 	} else {
-		ULOG_INFO("Sending immediate success response");
-		send_reply(ctx, req, "status", "ok");
-
-		// Send 'bbf.apply' event
-		send_bbf_apply_event(idx, changed_uci);
-
-		// Free the allocated memory
-		FREE(async_req->services);
-		FREE(async_req);
+		async_req->idx = idx;
+		ubus_defer_request(ctx, req, &async_req->req);
+		async_req->timeout.cb = sync_listen_timeout;
+		async_req->sync_ev.cb = sync_event_handler;
 
 		// Set internal commit to false
 		g_internal_commit = false;
 
-		ULOG_INFO("Commit handler exit");
+		wait_for_sync_complete_event(async_req);
 	}
 
 	return 0;

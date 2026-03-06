@@ -167,6 +167,30 @@ static int plugin_obj_match(DMOBJECT_ARGS)
 	return FAULT_9005;
 }
 
+static int reference_obj_match(DMOBJECT_ARGS)
+{
+	char skip_obj[][64] = { "Device.MQTT.", "Device.LocalAgent.", "Device.USPAgent.", "Device.STOMP." };
+
+	for (int i = 0; i < ARRAY_SIZE(skip_obj); i++) {
+		if (DM_STRSTR(node->current_object, skip_obj[i]) == node->current_object)
+			return FAULT_9005;
+	}
+
+	if (node->matched)
+		return 0;
+
+	if (!dmctx->inparam_isparam && DM_STRSTR(node->current_object, dmctx->in_param) == node->current_object) {
+		node->matched++;
+		dmctx->findparam = 1;
+		return 0;
+	}
+
+	if (DM_STRSTR(dmctx->in_param, node->current_object) == dmctx->in_param)
+		return 0;
+
+	return FAULT_9005;
+}
+
 static int plugin_leaf_match(DMOBJECT_ARGS)
 {
 	if (node->matched)
@@ -2483,14 +2507,14 @@ static int mparam_get_references_db(DMPARAM_ARGS)
 	if (node->is_instanceobj == 0)
 		return 0;
 
-	char full_param[MAX_DM_PATH] = {0};
-	char *value = dmstrdup("");
-
-	snprintf(full_param, sizeof(full_param), "%s%s", node->current_object, leaf->parameter);
-
-	(leaf->getvalue)(full_param, dmctx, data, instance, &value);
-
 	if (leaf->dm_flags & DM_FLAG_LINKER) {
+		char full_param[MAX_DM_PATH] = {0};
+		char *value = dmstrdup("");
+
+		snprintf(full_param, sizeof(full_param), "%s%s", node->current_object, leaf->parameter);
+
+		(leaf->getvalue)(full_param, dmctx, data, instance, &value);
+
 		add_path((struct list_head *)dmctx->addobj_instance, full_param, value);
 	}
 
@@ -2507,7 +2531,7 @@ int dm_entry_references_db(struct dmctx *ctx)
 	ctx->inparam_isparam = 0;
 	ctx->findparam = 1;
 	ctx->stop = 0;
-	ctx->checkobj = NULL;
+	ctx->checkobj = reference_obj_match;
 	ctx->checkleaf = NULL;
 	ctx->method_obj = mobj_get_references_db;
 	ctx->method_param = mparam_get_references_db;

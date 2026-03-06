@@ -319,6 +319,11 @@ static void fill_from_services(json_object *services_arr, const char *source_nam
 {
 	size_t _len = json_object_array_length(services_arr);
 	for (size_t _j = 0; _j < _len; _j++) {
+		if (*num_objs >= total_capacity) {
+			BBFDM_WARNING("Reached object capacity in %s", source_name);
+			break;
+		}
+
 		json_object *_svc  = json_object_array_get_idx(services_arr, _j);
 		json_object *_pdm  = NULL, *_obj = NULL, *_proto = NULL;
 		const char *_pdm_str, *_obj_str;
@@ -343,10 +348,6 @@ static void fill_from_services(json_object *services_arr, const char *source_nam
 		objects[*num_objs].protocol = get_proto_type(_proto ? json_object_get_string(_proto) : "");
 
 		(*num_objs)++;
-		if (*num_objs >= total_capacity) {
-			BBFDM_WARNING("Reached object capacity in %s", source_name);
-			break;
-		}
 	}
 }
 
