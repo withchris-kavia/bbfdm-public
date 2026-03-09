@@ -669,8 +669,10 @@ static int read_apply_handlers_config(const char *serv_config, bbfdm_config_t *c
 	}
 
 	json_object *enable_jobj = NULL;
+	bool enable = false;
 	json_object_object_get_ex(daemon_config, "enable", &enable_jobj);
-	bool enable = enable_jobj ? json_object_get_boolean(enable_jobj) : false;
+	const char *val = enable_jobj ? json_object_get_string(enable_jobj) : "0";
+	string_to_bool(val, &enable);
 	if (!enable) {
 		BBFDM_DEBUG("%s is disabled", serv_config);
 		json_object_put(json_root);

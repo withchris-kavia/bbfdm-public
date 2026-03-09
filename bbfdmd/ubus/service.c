@@ -22,6 +22,28 @@
 
 LIST_HEAD(registered_services);
 
+static int string_to_bool(const char *v, bool *b)
+{
+	if (v[0] == '1' && v[1] == '\0') {
+		*b = true;
+		return 0;
+	}
+	if (v[0] == '0' && v[1] == '\0') {
+		*b = false;
+		return 0;
+	}
+	if (strcasecmp(v, "true") == 0) {
+		*b = true;
+		return 0;
+	}
+	if (strcasecmp(v, "false") == 0) {
+		*b = false;
+		return 0;
+	}
+	*b = false;
+	return -1;
+}
+
 static void add_service_to_list(const char *name, struct blob_buf *dm_schema, int service_proto, int service_timeout,
 		service_object_t *objects, size_t count, bool is_unified)
 {
@@ -149,8 +171,10 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 	}
 
 	json_object *enable_jobj = NULL;
+	bool enable = false;
 	json_object_object_get_ex(daemon_config, "enable", &enable_jobj);
-	bool enable = enable_jobj ? json_object_get_boolean(enable_jobj) : false;
+	const char *val = enable_jobj ? json_object_get_string(enable_jobj) : "0";
+	string_to_bool(val, &enable);
 	if (!enable) {
 		BBFDM_INFO("Service is disabled, Skipping service");
 		json_object_put(json_root);
@@ -397,8 +421,10 @@ static void load_non_unified_services(struct ubus_context *ubus_ctx, file_list_t
 	}
 
 	json_object *enable_jobj = NULL;
+	bool enable = false;
 	json_object_object_get_ex(core_daemon, "enable", &enable_jobj);
-	bool enable = enable_jobj ? json_object_get_boolean(enable_jobj) : false;
+	const char *val = enable_jobj ? json_object_get_string(enable_jobj) : "0";
+	string_to_bool(val, &enable);
 	if (!enable) {
 		BBFDM_INFO("core service is disabled, Skipping service");
 		json_object_put(core_root);
@@ -454,8 +480,10 @@ static void load_non_unified_services(struct ubus_context *ubus_ctx, file_list_t
 		}
 
 		json_object *enable_jobj = NULL;
+		bool enabled = false;
 		json_object_object_get_ex(peer_daemon, "enable", &enable_jobj);
-		bool enabled = enable_jobj ? json_object_get_boolean(enable_jobj) : false;
+		const char *val = enable_jobj ? json_object_get_string(enable_jobj) : "0";
+		string_to_bool(val, &enabled);
 		if (!enabled) {
 			BBFDM_INFO("Service '%s' is disabled – skipping", fl->filenames[i]);
 			json_object_put(peer_root);
@@ -551,8 +579,10 @@ static int load_unified_service(struct ubus_context *ubus_ctx, const char *filen
 	}
 
 	json_object *enable_jobj = NULL;
+	bool enable = false;
 	json_object_object_get_ex(daemon_config, "enable", &enable_jobj);
-	bool enable = enable_jobj ? json_object_get_boolean(enable_jobj) : false;
+	const char *val = enable_jobj ? json_object_get_string(enable_jobj) : "0";
+	string_to_bool(val, &enable);
 	if (!enable) {
 		BBFDM_INFO("Unified service '%s' is disabled – skipping", filename);
 		json_object_put(json_root);
