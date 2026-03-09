@@ -194,8 +194,6 @@ void run_async_call(struct async_request_context *ctx, service_entry_t *service,
 
 	tracker->ctx = ctx;
 	tracker->service = service;
-	ctx->pending_requests++;
-	ctx->path_matched = true;
 
 	memset(&req_buf, 0, sizeof(struct blob_buf));
 	blob_buf_init(&req_buf, 0);
@@ -220,6 +218,7 @@ void run_async_call(struct async_request_context *ctx, service_entry_t *service,
 		uloop_timeout_cancel(&tracker->timeout);
 		BBFDM_FREE(tracker);
 	} else {
+		ctx->pending_requests++;
 		tracker->async_request.data_cb = ubus_result_callback;
 		tracker->async_request.complete_cb = ubus_request_complete;
 		ubus_complete_request_async(ctx->ubus_ctx, &tracker->async_request);

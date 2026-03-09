@@ -350,12 +350,13 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 		if (!service_path_match(context->requested_path, requested_proto, service))
 			continue;
 
+		context->path_matched = true;
 		run_async_call(context, service, msg);
 	}
 
 	context->service_list_processed = true;
 
-	if (context->path_matched == false)
+	if (context->pending_requests == 0)
 		send_response(context);
 
 	return 0;
