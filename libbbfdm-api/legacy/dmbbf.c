@@ -1127,6 +1127,17 @@ static char *get_default_value_by_type(const char *param_name, int type)
  * **********/
 static int get_value_obj(DMOBJECT_ARGS)
 {
+	if (node->is_instanceobj) {
+		char path[MAX_DM_PATH] = {0};
+		int len;
+
+		snprintf(path, sizeof(path), "%s", node->current_object);
+		len = DM_STRLEN(path);
+		if (len) {
+			path[len - 1] = 0;
+			blobmsg_add_string(&dmctx->bb_inst, "", path);
+		}
+	}
 	return 0;
 }
 
@@ -1155,6 +1166,17 @@ static int get_value_param(DMPARAM_ARGS)
 
 static int mobj_get_value_in_param(DMOBJECT_ARGS)
 {
+	if (node->is_instanceobj) {
+		char path[MAX_DM_PATH] = {0};
+		int len;
+
+		snprintf(path, sizeof(path), "%s", node->current_object);
+		len = DM_STRLEN(path);
+		if (len) {
+			path[len - 1] = 0;
+			blobmsg_add_string(&dmctx->bb_inst, "", path);
+		}
+	}
 	return 0;
 }
 static int mparam_get_value_in_param(DMPARAM_ARGS)

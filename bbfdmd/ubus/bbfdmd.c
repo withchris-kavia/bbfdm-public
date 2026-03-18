@@ -333,12 +333,14 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 	context->ubus_ctx = ctx;
 	context->raw_format = raw_format;
 
-	INIT_LIST_HEAD(&context->uci_modified);
+	memset(&context->instances_bb, 0, sizeof(struct blob_buf));
+	blob_buf_init(&context->instances_bb, BLOBMSG_TYPE_ARRAY);
 
-	memset(&context->tmp_bb, 0, sizeof(struct blob_buf));
-	blob_buf_init(&context->tmp_bb, 0);
+	memset(&context->results_bb, 0, sizeof(struct blob_buf));
+	blob_buf_init(&context->results_bb, BLOBMSG_TYPE_ARRAY);
 
-	context->array = blobmsg_open_array(&context->tmp_bb, "results");
+	memset(&context->modified_uci_bb, 0, sizeof(struct blob_buf));
+	blob_buf_init(&context->modified_uci_bb, BLOBMSG_TYPE_ARRAY);
 
 	ubus_defer_request(ctx, req, &context->request_data);
 

@@ -45,6 +45,7 @@ void bbf_ctx_init(struct dmctx *ctx, DMOBJ *tEntryObj)
 {
 	memset(&ctx->bb, 0, sizeof(struct blob_buf));
 	blob_buf_init(&ctx->bb, 0);
+	blob_buf_init(&ctx->bb_inst, BLOBMSG_TYPE_ARRAY);
 
 	ctx->dm_entryobj = tEntryObj;
 	dm_init_mem(ctx);
@@ -56,6 +57,7 @@ void bbf_ctx_init(struct dmctx *ctx, DMOBJ *tEntryObj)
 void bbf_ctx_clean(struct dmctx *ctx)
 {
 	blob_buf_free(&ctx->bb);
+	blob_buf_free(&ctx->bb_inst);
 
 	dm_uci_exit(ctx);
 	dm_clean_mem(ctx);

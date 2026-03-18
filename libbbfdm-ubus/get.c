@@ -56,6 +56,7 @@ void bbfdm_get(bbfdm_data_t *data, int method)
 
 	blobmsg_close_array(&data->bbf_ctx.bb, array);
 
+	blobmsg_add_field(&data->bbf_ctx.bb, BLOBMSG_TYPE_ARRAY, "instances", blobmsg_data(data->bbf_ctx.bb_inst.head), blobmsg_data_len(data->bbf_ctx.bb_inst.head));
 	if (!validate_msglen(data)) {
 		BBF_ERR("IPC failed for path(%s)", data->bbf_ctx.in_param);
 	}

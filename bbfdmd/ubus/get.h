@@ -20,11 +20,11 @@ enum {
 };
 
 struct async_request_context {
-	struct list_head uci_modified;
 	struct ubus_context *ubus_ctx;
 	struct ubus_request_data request_data;
-	struct blob_buf tmp_bb;
-	void *array;
+	struct blob_buf instances_bb;
+	struct blob_buf results_bb;
+	struct blob_buf modified_uci_bb;
 	bool service_list_processed;
 	bool path_matched;
 	bool raw_format;
@@ -41,10 +41,6 @@ struct ubus_request_tracker {
 	char request_name[128];
 };
 
-struct list_uci_modified {
-	struct list_head list;
-	char file_path[2048];
-};
 
 void run_async_call(struct async_request_context *ctx, service_entry_t *service, struct blob_attr *msg);
 void send_response(struct async_request_context *ctx);

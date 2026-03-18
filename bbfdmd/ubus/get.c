@@ -21,39 +21,44 @@ extern int g_log_level;
 
 static void prepare_and_send_response(struct async_request_context *ctx)
 {
+	void *array;
+	struct blob_buf tmp_bb = {0};
+
 	if (!ctx)
 		return;
 
-	if (ctx->path_matched == false) {
-		print_fault_message(&ctx->tmp_bb, ctx->requested_path, 9005, "Invalid parameter name");
+	memset(&tmp_bb, 0, sizeof(struct blob_buf));
+	blob_buf_init(&tmp_bb, 0);
+
+	if (!ctx->path_matched) {
+		array = blobmsg_open_array(&tmp_bb, "results");
+		print_fault_message(&tmp_bb, ctx->requested_path, 9005, "Invalid parameter name");
+		blobmsg_close_array(&tmp_bb, array);
+		goto end;
 	}
 
-	blobmsg_close_array(&ctx->tmp_bb, ctx->array);
+	// Add result blob to final blob
+	blobmsg_add_field(&tmp_bb, BLOBMSG_TYPE_ARRAY, "results", blobmsg_data(ctx->results_bb.head), blobmsg_data_len(ctx->results_bb.head));
 
-	struct list_uci_modified *list_node = NULL, *tmp = NULL;
-	void *array = blobmsg_open_array(&ctx->tmp_bb, "modified_uci");
+	blobmsg_add_field(&tmp_bb, BLOBMSG_TYPE_ARRAY, "modified_uci", blobmsg_data(ctx->modified_uci_bb.head), blobmsg_data_len(ctx->modified_uci_bb.head));
 
-	list_for_each_entry_safe(list_node, tmp, &ctx->uci_modified, list) {
-		blobmsg_add_string(&ctx->tmp_bb, "", list_node->file_path);
-		list_del(&list_node->list);
-		BBFDM_FREE(list_node);
-	}
+	blobmsg_add_field(&tmp_bb, BLOBMSG_TYPE_ARRAY, "instances", blobmsg_data(ctx->instances_bb.head), blobmsg_data_len(ctx->instances_bb.head));
 
-	blobmsg_close_array(&ctx->tmp_bb, array);
-
+end:
 	if (strcmp(ctx->ubus_method, "get") == 0 && ctx->raw_format == false) { // Pretty Format
 		struct blob_buf bb_pretty = {0};
 
 		memset(&bb_pretty, 0, sizeof(struct blob_buf));
 		blob_buf_init(&bb_pretty, 0);
 
-		prepare_pretty_response(ctx->requested_path, ctx->tmp_bb.head, &bb_pretty);
+		prepare_pretty_response(ctx->requested_path, tmp_bb.head, &bb_pretty);
 
 		ubus_send_reply(ctx->ubus_ctx, &ctx->request_data, bb_pretty.head);
 		blob_buf_free(&bb_pretty);
 	} else { // Raw Format
-		ubus_send_reply(ctx->ubus_ctx, &ctx->request_data, ctx->tmp_bb.head);
+		ubus_send_reply(ctx->ubus_ctx, &ctx->request_data, tmp_bb.head);
 	}
+	blob_buf_free(&tmp_bb);
 }
 
 void send_response(struct async_request_context *ctx)
@@ -61,7 +66,9 @@ void send_response(struct async_request_context *ctx)
 	prepare_and_send_response(ctx);
 
 	ubus_complete_deferred_request(ctx->ubus_ctx, &ctx->request_data, UBUS_STATUS_OK);
-	blob_buf_free(&ctx->tmp_bb);
+	blob_buf_free(&ctx->results_bb);
+	blob_buf_free(&ctx->instances_bb);
+	blob_buf_free(&ctx->modified_uci_bb);
 
 	BBFDM_INFO("END: ubus method|%s|, name|bbfdm|, path|%s|", ctx->ubus_method, ctx->requested_path);
 	BBFDM_FREE(ctx);
@@ -69,30 +76,29 @@ void send_response(struct async_request_context *ctx)
 
 static void append_response_data(struct ubus_request_tracker *tracker, struct blob_attr *msg)
 {
-	struct blob_attr *attr = NULL;
-	int remaining = 0;
-
 	if (!tracker || !msg)
 		return;
 
 	struct blob_attr *results = get_results_array(msg);
-	if (results) {
-		blobmsg_for_each_attr(attr, results, remaining) {
-			blobmsg_add_blob(&tracker->ctx->tmp_bb, attr);
-		}
-	}
+	if (results)
+		blob_put_raw(&tracker->ctx->results_bb, blobmsg_data(results), blobmsg_data_len(results));
+
+	struct blob_attr *instances = get_instances_array(msg);
+	if (instances)
+		blob_put_raw(&tracker->ctx->instances_bb, blobmsg_data(instances), blobmsg_data_len(instances));
 
 	struct blob_attr *modified_uci = get_modified_uci_array(msg);
 	if (modified_uci) {
+		struct blob_attr *attr = NULL;
+		int remaining = 0;
 		bool exist = false;
-		struct list_uci_modified *list_node = NULL;
-
-		attr = NULL;
-		remaining = 0;
+		struct blob_attr *existing = NULL;
+		int rem_existing = 0;
 
 		blobmsg_for_each_attr(attr, modified_uci, remaining) {
-			list_for_each_entry(list_node, &tracker->ctx->uci_modified, list) {
-				if (strcmp(list_node->file_path, blobmsg_get_string(attr)) == 0) {
+			exist = false;
+			blobmsg_for_each_attr(existing, tracker->ctx->modified_uci_bb.head, rem_existing) {
+				if (strcmp(blobmsg_get_string(existing), blobmsg_get_string(attr)) == 0) {
 					exist = true;
 					break;
 				}
@@ -101,15 +107,7 @@ static void append_response_data(struct ubus_request_tracker *tracker, struct bl
 			if (exist == true)
 				continue;
 
-			list_node = (struct list_uci_modified *)calloc(1, sizeof(struct list_uci_modified));
-			if (list_node == NULL) {
-				BBFDM_INFO("Failed to allocate memory in get response handler for changed uci");
-				continue;
-			}
-
-			INIT_LIST_HEAD(&list_node->list);
-			list_add_tail(&list_node->list, &tracker->ctx->uci_modified);
-			snprintf(list_node->file_path, sizeof(list_node->file_path), "%s", blobmsg_get_string(attr));
+			blobmsg_add_blob(&tracker->ctx->modified_uci_bb, attr);
 		}
 	}
 }

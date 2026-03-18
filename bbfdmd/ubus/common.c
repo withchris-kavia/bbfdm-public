@@ -94,13 +94,13 @@ void fill_optional_input(struct blob_attr *msg, unsigned int *proto, bool *raw_f
 	}
 }
 
-struct blob_attr *get_results_array(struct blob_attr *msg)
+struct blob_attr *get_blobmsg_array_by_name(struct blob_attr *msg, const char *name)
 {
 	struct blob_attr *tb[1] = {0};
-	const struct blobmsg_policy p[1] = {
-			{ "results", BLOBMSG_TYPE_ARRAY }
-	};
+	struct blobmsg_policy p[1] = {0};
 
+	p[0].name = name;
+	p[0].type = BLOBMSG_TYPE_ARRAY;
 	if (msg == NULL)
 		return NULL;
 
@@ -109,19 +109,19 @@ struct blob_attr *get_results_array(struct blob_attr *msg)
 	return tb[0];
 }
 
+struct blob_attr *get_results_array(struct blob_attr *msg)
+{
+	return get_blobmsg_array_by_name(msg, "results");
+}
+
 struct blob_attr *get_modified_uci_array(struct blob_attr *msg)
 {
-	struct blob_attr *tb[1] = {0};
-	const struct blobmsg_policy p[1] = {
-			{ "modified_uci", BLOBMSG_TYPE_ARRAY }
-	};
+	return get_blobmsg_array_by_name(msg, "modified_uci");
+}
 
-	if (msg == NULL)
-		return NULL;
-
-	blobmsg_parse(p, 1, tb, blobmsg_data(msg), blobmsg_len(msg));
-
-	return tb[0];
+struct blob_attr *get_instances_array(struct blob_attr *msg)
+{
+	return get_blobmsg_array_by_name(msg, "instances");
 }
 
 bool str_match(const char *string, const char *pattern, size_t nmatch, regmatch_t pmatch[])

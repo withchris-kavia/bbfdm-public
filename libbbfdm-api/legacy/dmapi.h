@@ -206,6 +206,7 @@ struct dmctx {
 	char *linker_param;
 
 	struct blob_buf bb;
+	struct blob_buf bb_inst;
 
 	DMOBJ *dm_entryobj;
 	struct uci_context *config_uci_ctx;
