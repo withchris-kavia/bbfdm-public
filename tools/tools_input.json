@@ -478,15 +478,14 @@
       "proto": "git",
       "service_name": "bridgemngr",
       "unified_daemon": false,
-      "dm_info_file": "src/driver_vlan_backend/datamodel_description.json",
+      "dm_info_file": "src/driver_vlan/datamodel_description.json",
       "compile": [
         "make -C src clean",
-        "make -C src CFLAGS+='-DBBF_VENDOR_PREFIX=\\\"X_IOWRT_EU_\\\"'"
+        "make -C src CFLAGS+='-DBBF_VENDOR_PREFIX=\\\"X_IOWRT_EU_\\\" -DBRIDGE_ENABLE_VENDOR_EXT -DBRIDGE_ENABLE_FDB_EXT'"
       ],
       "post_install": [
         "cp -f src/libbridgemngr.so /usr/share/bbfdm/micro_services/bridgemngr.so",
         "mkdir -p /usr/share/bbfdm/micro_services/bridgemngr",
-        "cp -f src/libbridgeext.so /usr/share/bbfdm/micro_services/bridgemngr",
         "cp -f /opt/dev/iopsys/bridgemngr/files/VLAN_Filtering_Extension.json /usr/share/bbfdm/micro_services/bridgemngr",
         "cp -f /opt/dev/iopsys/bridgemngr/bbfdm_service.json /etc/bbfdm/services/bridgemngr.json"
       ]
@@ -536,7 +535,7 @@
       "unified_daemon": false,
       "compile": [
         "make -C src clean",
-        "make -C src CFLAGS+='-DINCLUDE_PORT_TRIGGER'"
+        "make -C src CFLAGS+='-DBBF_VENDOR_PREFIX=\\\"X_IOWRT_EU_\\\" -DINCLUDE_PORT_TRIGGER'"
       ],
       "post_install": [
         "cp -f src/libfirewallmngr.so /usr/share/bbfdm/micro_services/firewallmngr.so",
