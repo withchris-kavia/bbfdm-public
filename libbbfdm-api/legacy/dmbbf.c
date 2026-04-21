@@ -772,23 +772,24 @@ struct uci_section *create_dmmap_obj(struct dmctx *dmctx, unsigned char instance
 				dmctx->obj_buf[instance_level] = obj_name;
 				dmctx->inst_buf[instance_level] = curr_instance;
 				*instance = curr_instance;
-				return dmmap_section;
+				return s;
 			}
 		}
 	}
 
 	dmasprintf(instance, "%d", max_instance + 1);
 
-	if (dmmap_section == NULL) {
-		// Section not found -> create it
-		char s_name[64] = {0};
+	{ // dmmap section not found -> create it
+		char s_name[128] = {0};
 		int pos = 0;
 
-		for (int i = 0; i < instance_level; i++) {
-			pos += snprintf(&s_name[pos], sizeof(s_name) - pos, "%s_%s", dmctx->obj_buf[i], dmctx->inst_buf[i]);
+		for (int i = 0; i < instance_level && pos < (int)sizeof(s_name); i++) {
+			pos += snprintf(s_name + pos, sizeof(s_name) - pos, "%s_%s", dmctx->obj_buf[i], dmctx->inst_buf[i]);
 		}
 
-		snprintf(&s_name[pos], sizeof(s_name) - pos, "%s_%s", obj_name, *instance);
+		if (pos < (int)sizeof(s_name)) {
+			snprintf(s_name + pos, sizeof(s_name) - pos, "%s_%s", obj_name, *instance);
+		}
 
 		dmuci_add_named_section_bbfdm(obj_file, obj_name, s_name, &dmmap_section);
 
