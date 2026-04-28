@@ -149,6 +149,8 @@ int hex_to_ip(const char *address, char *ret, size_t size);
 void add_dmmap_config_dup_list(struct list_head *dup_list, struct uci_section *config_section, struct uci_section *dmmap_section);
 void free_dmmap_config_dup_list(struct list_head *dup_list);
 void synchronize_specific_config_sections_with_dmmap(const char *package, const char *section_type, const char *dmmap_package, struct list_head *dup_list);
+void synchronize_config_sections_with_dmmap_sections(const char *package, const char *section_type, const char *dmmap_package,
+		struct list_head *dup_list, int browse_type);
 void synchronize_specific_config_sections_with_dmmap_eq(const char *package, const char *section_type, const char *dmmap_package,
 		const char *option_name, const char *option_value, struct list_head *dup_list);
 void synchronize_specific_config_sections_with_dmmap_cont(const char *package, const char *section_type, const char *dmmap_package,

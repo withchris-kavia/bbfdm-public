@@ -466,6 +466,56 @@ void synchronize_specific_config_sections_with_dmmap(const char *package, const 
 	}
 }
 
+void synchronize_config_sections_with_dmmap_sections(const char *package, const char *section_type,
+				const char *dmmap_package, struct list_head *dup_list, int browse_type)
+{
+	struct uci_section *s = NULL, *stmp = NULL, *dmmap_sect = NULL;
+	char *v = NULL;
+
+	uci_foreach_sections(package, section_type, s) {
+		char sec_name[64] = {0};
+
+		snprintf(sec_name, sizeof(sec_name), "%s_%s", section_type, section_name(s));
+
+		if (browse_type == BROWSE_FIND_MAX_INST) {
+			/*
+			 * create/update corresponding dmmap section that have same config_section link and using param_value_array
+			 */
+			if ((dmmap_sect = get_dup_section_in_dmmap(dmmap_package, section_type, section_name(s))) == NULL) {
+				dmuci_add_section_bbfdm(dmmap_package, section_type, &dmmap_sect);
+				dmuci_rename_section_by_section(dmmap_sect, sec_name);
+				dmuci_set_value_by_section_bbfdm(dmmap_sect, "section_name", section_name(s));
+			} else {
+				const char *reg_exp = "^cfg[0-9a-fA-F]{6}$";
+				if (match(section_name(dmmap_sect), reg_exp, 0, NULL) == true) {
+					dmuci_rename_section_by_section(dmmap_sect, sec_name);
+				}
+			}
+
+			/*
+			 * Add system and dmmap sections to the list
+			 */
+			add_dmmap_config_dup_list(dup_list, s, dmmap_sect);
+		} else {
+			if ((dmmap_sect = get_dup_section_in_dmmap(dmmap_package, section_type, section_name(s))) != NULL) {
+				add_dmmap_config_dup_list(dup_list, s, dmmap_sect);
+			}
+		}
+	}
+
+	if (browse_type == BROWSE_FIND_MAX_INST)
+		return;
+
+	/*
+	 * Delete unused dmmap sections
+	 */
+	uci_path_foreach_sections_safe(bbfdm, dmmap_package, section_type, stmp, s) {
+		dmuci_get_value_by_section_string(s, "section_name", &v);
+		if (get_origin_section_from_config(package, section_type, v) == NULL)
+			dmuci_delete_by_section(s, NULL, NULL);
+	}
+}
+
 void synchronize_specific_config_sections_with_dmmap_eq(const char *package, const char *section_type, const char *dmmap_package,
 		const char *option_name, const char *option_value, struct list_head *dup_list)
 {
