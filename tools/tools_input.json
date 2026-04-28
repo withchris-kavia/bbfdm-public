@@ -486,7 +486,6 @@
       "post_install": [
         "cp -f src/libbridgemngr.so /usr/share/bbfdm/micro_services/bridgemngr.so",
         "mkdir -p /usr/share/bbfdm/micro_services/bridgemngr",
-        "cp -f /opt/dev/iopsys/bridgemngr/files/VLAN_Filtering_Extension.json /usr/share/bbfdm/micro_services/bridgemngr",
         "cp -f /opt/dev/iopsys/bridgemngr/bbfdm_service.json /etc/bbfdm/services/bridgemngr.json"
       ]
     },
