@@ -1017,6 +1017,8 @@ static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_objec
 	}
 
 	struct action_node *node = NULL, *tmp = NULL;
+	bool external_handler = false;
+
 	list_for_each_entry_safe(node, tmp, &action_list, list) {
 		char cmd[4096] = {0};
 		unsigned pos = 0;
@@ -1029,18 +1031,22 @@ static int bbf_config_commit_handler(struct ubus_context *ctx, struct ubus_objec
 			continue;
 		}
 
+		if (strcmp(node->action, DEFAULT_HANDLER_ACT) != 0)
+			external_handler = true;
+
 		pos += snprintf(cmd, sizeof(cmd), "sh %s", node->action);
 
 		for (int i = 0; i < node->idx; i++) {
 			pos += snprintf(&cmd[pos], sizeof(cmd) - pos, " %s", node->arg[i]);
 		}
 
+		ULOG_INFO("Executing apply handler: '%s'", cmd);
 		exec_apply_handler_script(cmd);
 		list_del(&node->list);
 		FREE(node);
 	}
 
-	if (monitor && reload) {
+	if (monitor && reload && !external_handler) {
 		ULOG_INFO("Deferring request and setting up async completion");
 		async_req->idx = idx;
 		ubus_defer_request(ctx, req, &async_req->req);
