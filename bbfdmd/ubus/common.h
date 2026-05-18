@@ -45,6 +45,7 @@ bool proto_match(unsigned int dm_type, const enum bbfdmd_type_enum type);
 
 void print_fault_message(struct blob_buf *blob_buf, const char *path, uint32_t fault_code, const char *fault_msg);
 
-void run_sync_call(const char *ubus_obj, const char *ubus_method, struct blob_attr *msg, struct blob_buf *bb_response);
+int run_sync_call(struct ubus_context *ubus_ctx, const char *ubus_obj, const char *ubus_method,
+		struct blob_attr *msg, struct blob_buf *bb_response, int timeout);
 
 #endif /* BBFDMD_COMMON_H */

@@ -27,6 +27,12 @@
 
 struct ubus_context g_ubus_ctx = {0};
 
+#define BBFDMD_FAULT_CRUD_FAILURE 7015
+#define BBFDMD_FAULT_CREATION_FAILURE 7017
+#define BBFDMD_FAULT_SET_FAILURE 7020
+#define BBFDMD_FAULT_DELETE_FAILURE 7024
+#define BBFDMD_FAULT_INVALID_PATH 7026
+
 extern struct list_head registered_services;
 extern int g_log_level;
 
@@ -238,7 +244,7 @@ static void bbfdm_handle_schema_request(struct ubus_context *ctx, struct ubus_re
 	}
 
 	if (!schema_found)
-		print_fault_message(&bb, requested_path, 7026, "Path is not present in the data model schema");
+		print_fault_message(&bb, requested_path, BBFDMD_FAULT_INVALID_PATH, "Path is not present in the data model schema");
 
 	blobmsg_close_array(&bb, array);
 
@@ -318,13 +324,76 @@ static int bbfdm_handler_async(struct ubus_context *ctx, struct ubus_object *obj
 	return 0;
 }
 
+static uint32_t sync_fault_code(const char *method)
+{
+	if (!method)
+		return BBFDMD_FAULT_CRUD_FAILURE;
+
+	if (strcmp(method, "add") == 0)
+		return BBFDMD_FAULT_CREATION_FAILURE;
+
+	if (strcmp(method, "set") == 0)
+		return BBFDMD_FAULT_SET_FAILURE;
+
+	if (strcmp(method, "del") == 0)
+		return BBFDMD_FAULT_DELETE_FAILURE;
+
+	return BBFDMD_FAULT_CRUD_FAILURE;
+}
+
+static bool sync_response_has_results(struct blob_buf *bb)
+{
+	struct blob_attr *results;
+	struct blob_attr *attr;
+	int remaining = 0;
+
+	if (!bb || !bb->head)
+		return false;
+
+	results = get_results_array(bb->head);
+	if (!results)
+		return false;
+
+	blobmsg_for_each_attr(attr, results, remaining) {
+		return true;
+	}
+
+	return false;
+}
+
+static void set_sync_fault_response(struct blob_buf *bb, const char *path, const char *method,
+		const char *service, uint32_t fault_code, const char *fault_msg)
+{
+	void *array;
+	char msg[MAX_VALUE_LENGTH] = {0};
+
+	if (!bb)
+		return;
+
+	blob_buf_free(bb);
+	blob_buf_init(bb, 0);
+
+	if (!fault_msg) {
+		snprintf(msg, sizeof(msg), "Data model service '%s' is not ready for '%s' request",
+			 service ? service : "unknown", method ? method : "unknown");
+		fault_msg = msg;
+	}
+
+	array = blobmsg_open_array(bb, "results");
+	print_fault_message(bb, path, fault_code, fault_msg);
+	blobmsg_close_array(bb, array);
+}
+
 static int bbfdm_handler_sync(struct ubus_context *ctx, struct ubus_object *obj,
 	struct ubus_request_data *req, const char *method, struct blob_attr *msg)
 {
 	struct blob_attr *tb[__BBFDM_MAX];
 	service_entry_t *service = NULL;
+	const char *failed_service_name = NULL;
 	char requested_path[MAX_PATH_LENGTH];
 	unsigned int requested_proto = BBFDMD_BOTH;
+	bool path_matched = false;
+	int last_failure = UBUS_STATUS_OK;
 	bool raw_format = false;
 	struct blob_buf bb = {0};
 
@@ -348,6 +417,7 @@ static int bbfdm_handler_sync(struct ubus_context *ctx, struct ubus_object *obj,
 	fill_optional_input(tb[BBFDM_INPUT], &requested_proto, &raw_format);
 
 	list_for_each_entry(service, &registered_services, list) {
+		int ret;
 
 		if (service->is_blacklisted)
 			continue;
@@ -355,7 +425,40 @@ static int bbfdm_handler_sync(struct ubus_context *ctx, struct ubus_object *obj,
 		if (!service_path_match(requested_path, requested_proto, service))
 			continue;
 
-		run_sync_call(service->name, method, msg, &bb);
+		path_matched = true;
+
+		ret = run_sync_call(ctx, service->name, method, msg, &bb, service->timeout);
+		if (ret != UBUS_STATUS_OK) {
+			last_failure = ret;
+			failed_service_name = service->name;
+			service->consecutive_timeouts++;
+			if (service->consecutive_timeouts >= SERVICE_MAX_CONSECUTIVE_TIMEOUTS) {
+				service->is_blacklisted = true;
+				BBFDM_ERR("Service '%s' has been blacklisted due to repeated timeouts", service->name);
+			}
+			continue;
+		}
+
+		service->consecutive_timeouts = 0;
+	}
+
+	if (!path_matched) {
+		set_sync_fault_response(&bb, requested_path, method, NULL,
+				BBFDMD_FAULT_INVALID_PATH, "Path is not present in the data model schema");
+	} else if (!sync_response_has_results(&bb)) {
+		char fault_msg[MAX_VALUE_LENGTH] = {0};
+
+		if (last_failure != UBUS_STATUS_OK) {
+			snprintf(fault_msg, sizeof(fault_msg),
+				 "Data model service '%s' is not ready for '%s' request: %s",
+				 failed_service_name ? failed_service_name : "unknown",
+				 method, ubus_strerror(last_failure));
+		} else {
+			snprintf(fault_msg, sizeof(fault_msg),
+				 "Data model service returned no result for '%s' request", method);
+		}
+		set_sync_fault_response(&bb, requested_path, method, failed_service_name,
+				sync_fault_code(method), fault_msg);
 	}
 
 	ubus_send_reply(ctx, req, bb.head);

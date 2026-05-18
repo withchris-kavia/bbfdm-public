@@ -10,11 +10,14 @@
  */
 
 #include <string.h>
+#include <unistd.h>
 #include <libubox/blobmsg_json.h>
 
 #include "common.h"
 
 int g_log_level = LOG_ERR;
+
+#define SERVICE_READY_POLL_INTERVAL_MS 100
 
 void init_rand_seed(void)
 {
@@ -161,14 +164,48 @@ static void sync_callback(struct ubus_request *req, int type __attribute__((unus
 	}
 }
 
-void run_sync_call(const char *ubus_obj, const char *ubus_method, struct blob_attr *msg, struct blob_buf *bb_response)
+static int wait_for_ubus_object(struct ubus_context *ctx, const char *ubus_obj, int timeout_ms, uint32_t *out_id)
+{
+	int waited_ms = 0;
+	int ret;
+
+	if (!ctx || !ubus_obj || !out_id)
+		return UBUS_STATUS_INVALID_ARGUMENT;
+
+	if (timeout_ms <= 0)
+		timeout_ms = SERVICE_CALL_TIMEOUT;
+
+	while (1) {
+		int sleep_ms;
+
+		ret = ubus_lookup_id(ctx, ubus_obj, out_id);
+		if (ret == UBUS_STATUS_OK)
+			return UBUS_STATUS_OK;
+
+		if (waited_ms >= timeout_ms)
+			return ret;
+
+		sleep_ms = timeout_ms - waited_ms;
+		if (sleep_ms > SERVICE_READY_POLL_INTERVAL_MS)
+			sleep_ms = SERVICE_READY_POLL_INTERVAL_MS;
+
+		usleep(sleep_ms * 1000);
+		waited_ms += sleep_ms;
+	}
+}
+
+int run_sync_call(struct ubus_context *ubus_ctx, const char *ubus_obj, const char *ubus_method,
+		struct blob_attr *msg, struct blob_buf *bb_response, int timeout)
 {
 	struct blob_buf req_buf = {0};
 	struct blob_attr *attr = NULL;
 	int remaining = 0;
+	int call_timeout = timeout > 0 ? timeout : SERVICE_CALL_TIMEOUT;
+	uint32_t id = 0;
+	int ret;
 
-	if (!ubus_obj || !ubus_method || !msg || !bb_response)
-		return;
+	if (!ubus_ctx || !ubus_obj || !ubus_method || !msg || !bb_response)
+		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	memset(&req_buf, 0, sizeof(struct blob_buf));
 	blob_buf_init(&req_buf, 0);
@@ -180,10 +217,23 @@ void run_sync_call(const char *ubus_obj, const char *ubus_method, struct blob_at
 	if (g_log_level == LOG_DEBUG) {
 		char *json_str = blobmsg_format_json_indent(req_buf.head, true, -1);
 		BBFDM_DEBUG("### ubus call %s %s '%s' ###", ubus_obj, ubus_method, json_str);
-		BBFDM_FREE(json_str);		
+		BBFDM_FREE(json_str);
 	}
 
-	BBFDM_UBUS_INVOKE_SYNC(ubus_obj, ubus_method, req_buf.head, 5000, sync_callback, bb_response);
+	ret = wait_for_ubus_object(ubus_ctx, ubus_obj, call_timeout, &id);
+	if (ret != UBUS_STATUS_OK) {
+		BBFDM_WARNING("Timed out waiting for UBUS object '%s' before '%s' request: %s",
+			      ubus_obj, ubus_method, ubus_strerror(ret));
+		goto out;
+	}
 
+	ret = ubus_invoke(ubus_ctx, id, ubus_method, req_buf.head, sync_callback, bb_response, call_timeout);
+	if (ret != UBUS_STATUS_OK) {
+		BBFDM_ERR("UBUS invoke failed for '%s %s': %s",
+			  ubus_obj, ubus_method, ubus_strerror(ret));
+	}
+
+out:
 	blob_buf_free(&req_buf);
+	return ret;
 }
