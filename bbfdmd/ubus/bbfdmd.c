@@ -324,8 +324,11 @@ static int bbfdm_handler_sync(struct ubus_context *ctx, struct ubus_object *obj,
 	struct blob_attr *tb[__BBFDM_MAX];
 	service_entry_t *service = NULL;
 	char requested_path[MAX_PATH_LENGTH];
+	char unreachable_service[MAX_PATH_LENGTH] = {0};
 	unsigned int requested_proto = BBFDMD_BOTH;
 	bool raw_format = false;
+	bool path_matched = false;
+	bool service_invoked = false;
 	struct blob_buf bb = {0};
 
 	if (blobmsg_parse(bbfdm_policy, __BBFDM_MAX, tb, blob_data(msg), blob_len(msg))) {
@@ -349,13 +352,65 @@ static int bbfdm_handler_sync(struct ubus_context *ctx, struct ubus_object *obj,
 
 	list_for_each_entry(service, &registered_services, list) {
 
-		if (service->is_blacklisted)
-			continue;
-
 		if (!service_path_match(requested_path, requested_proto, service))
 			continue;
 
-		run_sync_call(service->name, method, msg, &bb);
+		path_matched = true;
+
+		if (service->is_blacklisted) {
+			/*
+			 * The service owns this subtree but isn't reachable
+			 * over ubus yet (boot race, or blacklisted after
+			 * repeated timeouts). Record the name so we can
+			 * surface a retry-able fault below instead of
+			 * silently returning an empty success response.
+			 */
+			if (unreachable_service[0] == '\0')
+				snprintf(unreachable_service, sizeof(unreachable_service), "%s", service->name);
+			continue;
+		}
+
+		if (run_sync_call(service->name, method, msg, &bb)) {
+			service_invoked = true;
+		} else {
+			/*
+			 * Race: the service was reachable when registered but
+			 * has since gone away (or hasn't fully come up yet).
+			 * Treat it the same as a blacklisted service so a
+			 * fault is surfaced below.
+			 */
+			service->is_blacklisted = true;
+			if (unreachable_service[0] == '\0')
+				snprintf(unreachable_service, sizeof(unreachable_service), "%s", service->name);
+		}
+	}
+
+	if (!service_invoked) {
+		/*
+		 * Either no service owns this path, or every owning service
+		 * was blacklisted/unreachable. Replace the empty response
+		 * with a fault so the caller (e.g. obuspa) does not interpret
+		 * the silence as a successful no-op.
+		 */
+		blob_buf_free(&bb);
+		memset(&bb, 0, sizeof(struct blob_buf));
+		blob_buf_init(&bb, 0);
+
+		void *array = blobmsg_open_array(&bb, "results");
+
+		if (path_matched && unreachable_service[0] != '\0') {
+			char fault_msg[MAX_PATH_LENGTH + 64] = {0};
+
+			snprintf(fault_msg, sizeof(fault_msg),
+				"Datamodel micro-service '%s' is not ready; retry later",
+				unreachable_service);
+			BBFDM_WARNING("%s '%s': %s", method, requested_path, fault_msg);
+			print_fault_message(&bb, requested_path, 7007, fault_msg);
+		} else {
+			print_fault_message(&bb, requested_path, 7026, "Path is not present in the data model schema");
+		}
+
+		blobmsg_close_array(&bb, array);
 	}
 
 	ubus_send_reply(ctx, req, bb.head);

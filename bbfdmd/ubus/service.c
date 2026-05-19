@@ -23,7 +23,7 @@
 LIST_HEAD(registered_services);
 
 static void add_service_to_list(const char *name, struct blob_buf *dm_schema, int service_proto, int service_timeout,
-		service_object_t *objects, size_t count, bool is_unified)
+		service_object_t *objects, size_t count, bool is_unified, bool is_blacklisted)
 {
 	service_entry_t *service = NULL;
 
@@ -47,6 +47,7 @@ static void add_service_to_list(const char *name, struct blob_buf *dm_schema, in
 	service->objects = objects;
 	service->object_count = count;
 	service->is_unified = is_unified;
+	service->is_blacklisted = is_blacklisted;
 }
 
 static void receive_schema_result(struct ubus_request *req, int type __attribute__((unused)), struct blob_attr *msg)
@@ -70,12 +71,12 @@ static void receive_schema_result(struct ubus_request *req, int type __attribute
 	}
 }
 
-void fill_service_schema(struct ubus_context *ubus_ctx, int ubus_timeout, const char *service_name, struct blob_buf **service_schema)
+bool fill_service_schema(struct ubus_context *ubus_ctx, int ubus_timeout, const char *service_name, struct blob_buf **service_schema)
 {
 	uint32_t ubus_id;
 
 	if (!ubus_ctx || !service_name || !service_schema)
-		return;
+		return false;
 
 	if (*service_schema != NULL) {
 		blob_buf_free(*service_schema);
@@ -88,7 +89,7 @@ void fill_service_schema(struct ubus_context *ubus_ctx, int ubus_timeout, const 
 		*service_schema = (struct blob_buf *)calloc(1, sizeof(struct blob_buf));
 		if (*service_schema == NULL) {
 			BBFDM_ERR("Failed to allocate memory");
-			return;
+			return false;
 		}
 
 		blob_buf_init(*service_schema, 0);
@@ -109,9 +110,11 @@ void fill_service_schema(struct ubus_context *ubus_ctx, int ubus_timeout, const 
 		}
 
 		blob_buf_free(&bb);
-	} else {
-		BBFDM_WARNING("Failed to lookup UBUS object: %s", service_name);
+		return true;
 	}
+
+	BBFDM_WARNING("Failed to lookup UBUS object: %s", service_name);
+	return false;
 }
 
 static int load_service_from_file(struct ubus_context *ubus_ctx, const char *filename, const char *file_path)
@@ -150,7 +153,7 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 	char service_name[MAX_PATH_LENGTH] = {0};
 
 	snprintf(service_name, sizeof(service_name), "%s.%.*s", BBFDM_UBUS_OBJECT, (int)(strlen(filename) - 5), filename);
-	fill_service_schema(ubus_ctx, 2000, service_name, &service_schema);
+	bool service_reachable = fill_service_schema(ubus_ctx, 2000, service_name, &service_schema);
 
 	json_object *unified_daemon_jobj = NULL;
 	json_object_object_get_ex(daemon_config, "unified_daemon", &unified_daemon_jobj);
@@ -204,8 +207,14 @@ static int load_service_from_file(struct ubus_context *ubus_ctx, const char *fil
 		num_objs++;
 	}
 
-	BBFDM_INFO("Registering [%s :: %lu :: %d]", service_name, num_objs, is_unified);
-	add_service_to_list(service_name, service_schema, service_proto, service_timeout, objects, num_objs, is_unified);
+	BBFDM_INFO("Registering [%s :: %lu :: %d :: reachable=%d]", service_name, num_objs, is_unified, service_reachable);
+	/*
+	 * If the service's ubus object isn't on the bus yet, register it as
+	 * blacklisted so the handlers don't try to route requests to it. The
+	 * ubus.object.add watcher in bbfdmd.c clears the flag (and refreshes
+	 * the schema) once the service appears.
+	 */
+	add_service_to_list(service_name, service_schema, service_proto, service_timeout, objects, num_objs, is_unified, !service_reachable);
 	json_object_put(json_root);
 	return 0;
 }
