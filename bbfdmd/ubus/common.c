@@ -161,14 +161,16 @@ static void sync_callback(struct ubus_request *req, int type __attribute__((unus
 	}
 }
 
-void run_sync_call(const char *ubus_obj, const char *ubus_method, struct blob_attr *msg, struct blob_buf *bb_response)
+bool run_sync_call(const char *ubus_obj, const char *ubus_method, struct blob_attr *msg, struct blob_buf *bb_response)
 {
 	struct blob_buf req_buf = {0};
 	struct blob_attr *attr = NULL;
+	struct bbfdm_ctx bbfdm_ctx = {0};
 	int remaining = 0;
+	int rc;
 
 	if (!ubus_obj || !ubus_method || !msg || !bb_response)
-		return;
+		return false;
 
 	memset(&req_buf, 0, sizeof(struct blob_buf));
 	blob_buf_init(&req_buf, 0);
@@ -180,10 +182,20 @@ void run_sync_call(const char *ubus_obj, const char *ubus_method, struct blob_at
 	if (g_log_level == LOG_DEBUG) {
 		char *json_str = blobmsg_format_json_indent(req_buf.head, true, -1);
 		BBFDM_DEBUG("### ubus call %s %s '%s' ###", ubus_obj, ubus_method, json_str);
-		BBFDM_FREE(json_str);		
+		BBFDM_FREE(json_str);
 	}
 
-	BBFDM_UBUS_INVOKE_SYNC(ubus_obj, ubus_method, req_buf.head, 5000, sync_callback, bb_response);
+	/*
+	 * Use bbfdm_ubus_invoke_sync directly (instead of the BBFDM_UBUS_INVOKE_SYNC
+	 * macro) so the caller can tell whether the micro-service actually answered.
+	 * A failed lookup or invoke must not look like a successful empty reply.
+	 */
+	memset(&bbfdm_ctx, 0, sizeof(struct bbfdm_ctx));
+	bbfdm_init_ctx(&bbfdm_ctx);
+	rc = bbfdm_ubus_invoke_sync(&bbfdm_ctx, ubus_obj, ubus_method, req_buf.head, 5000, sync_callback, bb_response);
+	bbfdm_free_ctx(&bbfdm_ctx);
 
 	blob_buf_free(&req_buf);
+
+	return rc == 0;
 }
